@@ -30,7 +30,7 @@ export function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <Link href="/" className="text-xl font-bold text-primary-500 relative">
-              The A-List Hub
+              A-List Hub
               <span className="absolute -top-0.5 -right-6 text-[0.60rem] bg-primary-500 text-black px-1.5 py-0.5 rounded-sm font-bold leading-none">v2</span>
             </Link>
             <LoadingSpinner />
