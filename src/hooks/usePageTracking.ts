@@ -94,19 +94,22 @@ export function usePageTracking() {
 
     // Handle visibility changes
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        if (sessionIdRef.current) {
-          supabase
-            .from('page_sessions')
-            .update({ is_active: false })
-            .eq('id', sessionIdRef.current)
-            .then(() => {})
-            .catch(console.error)
-        }
-      } else if (document.visibilityState === 'visible') {
-        markAsActive()
-      }
+  if (document.visibilityState === 'hidden') {
+    if (sessionIdRef.current) {
+      Promise.resolve(
+        supabase
+          .from('page_sessions')
+          .update({ is_active: false })
+          .eq('id', sessionIdRef.current)
+      )
+        .then(() => {})
+        .catch(console.error)
     }
+  } else if (document.visibilityState === 'visible') {
+    markAsActive()
+  }
+}
+
 
     // Handle page unload
     const handleBeforeUnload = () => {
