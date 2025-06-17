@@ -1,10 +1,5 @@
 'use client'
 
-// Force dynamic rendering - prevents static generation and caching
-export const dynamic = 'force-dynamic'
-// Revalidate every request to ensure fresh data
-export const revalidate = 0
-
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
