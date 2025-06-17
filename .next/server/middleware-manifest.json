@@ -10,18 +10,15 @@
       "page": "/",
       "matchers": [
         {
-          "regexp": "^(?:\\/(_next\\/data\\/[^/]{1,}))?(?:\\/((?!_next\\/static|_next\\/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*))(.json)?[\\/#\\?]?$",
-          "originalSource": "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"
+          "regexp": "^/.*$",
+          "originalSource": "/:path*"
         }
       ],
       "wasm": [],
       "assets": [],
       "env": {
-        "__NEXT_BUILD_ID": "GeJtMfe5Hve2WidumcE9R",
-        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "w2mUBSHDLOreXF6pK+0CIJvWIbruq3xHDkTdbOTWnAg=",
-        "__NEXT_PREVIEW_MODE_ID": "a5431a45f43bcb61ec998a4c9653aca4",
-        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "f17ebb5f11af006440a0e4d0f099c499fe9b7f26a44fcbaeed773af3676e4e8a",
-        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "864c267c331f2770922cdc93302fd5c543ca6dfd4fbff4f1b75f7a3a76bdfdda"
+        "__NEXT_BUILD_ID": "development",
+        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "ZJqYjklZCE5fviH/1rMc52uDf8HADp0NS/L383GafK8="
       }
     }
   },

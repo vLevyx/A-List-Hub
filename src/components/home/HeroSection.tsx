@@ -76,7 +76,7 @@ export function HeroSection() {
             transition={{ duration: 0.6, delay: 0.1 }}
             className="text-4xl sm:text-5xl font-bold text-primary-500 mb-4"
           >
-            A-List ELAN Hub
+            A-List Hub
           </motion.h1>
           
           <motion.p

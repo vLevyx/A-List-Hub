@@ -10,12 +10,21 @@ export function getDiscordId(user: any): string | null {
   if (!user) return null
   
   try {
-    // Try multiple possible locations for the Discord ID
-    return user?.user_metadata?.provider_id || 
-           user?.user_metadata?.sub || 
-           user?.identities?.[0]?.id ||
-           user?.id || 
-           null
+    // More reliable extraction with fallbacks
+    const discordId = 
+      user?.user_metadata?.provider_id || 
+      user?.user_metadata?.sub || 
+      user?.identities?.find((id: any) => id.provider === 'discord')?.id ||
+      user?.id || 
+      null
+    
+    // Validate the ID format (Discord IDs are numeric strings)
+    if (discordId && /^\d{17,19}$/.test(discordId)) {
+      return discordId
+    }
+    
+    console.warn('Invalid Discord ID format:', discordId)
+    return null
   } catch (error) {
     console.error('Error extracting Discord ID:', error)
     return null

@@ -1,18 +1,3 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/auth/auth-code-error/page": "app/auth/auth-code-error/page.js",
-  "/auth/callback/route": "app/auth/callback/route.js",
-  "/calculator/page": "app/calculator/page.js",
-  "/page": "app/page.js",
-  "/admin/page": "app/admin/page.js",
-  "/privacy/page": "app/privacy/page.js",
-  "/price/page": "app/price/page.js",
-  "/server-status/page": "app/server-status/page.js",
-  "/profile/page": "app/profile/page.js",
-  "/overfuel/page": "app/overfuel/page.js",
-  "/whitelist/page": "app/whitelist/page.js",
-  "/weapon-compatibility/page": "app/weapon-compatibility/page.js",
-  "/vehicle-overview/page": "app/vehicle-overview/page.js",
-  "/codelock/page": "app/codelock/page.js",
-  "/imprint/page": "app/imprint/page.js"
+  "/page": "app/page.js"
 }
