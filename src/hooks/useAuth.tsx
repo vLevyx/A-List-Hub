@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getDiscordId, isUserWhitelisted, hasValidTrial } from "@/lib/utils";
 import type { AuthState, AuthUser, AuthSession } from "@/types/auth";
 import type { User } from "@/types/database";
+import { useRouter } from "next/navigation";
 
 // Define auth context with extended functionality
 const AuthContext = createContext<
@@ -54,6 +55,7 @@ const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY = 1000; // 1 second
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   // Enhanced state management
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -229,6 +231,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Clear auth cache
       localStorage.removeItem(AUTH_CACHE_KEY);
+      localStorage.removeItem("profile_data_cache");
+      localStorage.removeItem("blueprints_cache");
 
       // Reset state
       setState({
@@ -245,6 +249,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
         refreshIntervalRef.current = null;
+      }
+
+      // Redirect to homepage & refresh since next.js uses soft navigations by default
+      if (router) {
+        router.push("/");
+        router.refresh();
+      } else {
+        window.location.href = "/";
       }
     } catch (error) {
       console.error("Error signing out:", error);
@@ -299,16 +311,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           );
 
           // Track login
-          const discordId = getDiscordId(session.user);
-          const username =
-            session.user.user_metadata?.full_name || "Discord User";
+          // const discordId = getDiscordId(session.user);
+          // const username =
+          //   session.user.user_metadata?.full_name || "Discord User";
 
-          if (discordId) {
-            await supabase.rpc("upsert_user_login", {
-              target_discord_id: discordId,
-              user_name: username,
-            });
-          }
+          // if (discordId) {
+          //   await supabase.rpc("upsert_user_login", {
+          //     target_discord_id: discordId,
+          //     user_name: username,
+          //   });
+          // }
         } else {
           setState((prev) => ({ ...prev, loading: false }));
         }
@@ -337,6 +349,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { hasAccess, isTrialActive } = await checkUserAccess(
           session.user as AuthUser
         );
+
+        // Track login
+        const discordId = getDiscordId(session.user);
+        const username =
+          session.user.user_metadata?.full_name || "Discord User";
+
+        if (discordId) {
+          await supabase.rpc("upsert_user_login", {
+            target_discord_id: discordId,
+            user_name: username,
+          });
+        }
+
+        //Silently refresh or reload screen since nextjs uses soft navigations
+        if (router) {
+          router.refresh();
+        } else {
+          window.location.reload();
+        }
 
         const newState = {
           user: session.user as AuthUser,
@@ -369,6 +400,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (event === "SIGNED_OUT") {
         // Clear auth cache
         localStorage.removeItem(AUTH_CACHE_KEY);
+        localStorage.removeItem("profile_data_cache");
+        localStorage.removeItem("blueprints_cache");
 
         setState({
           user: null,
