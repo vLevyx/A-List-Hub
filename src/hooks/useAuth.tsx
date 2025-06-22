@@ -268,7 +268,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
-    if (initialLoadAttemptedRef.current) return;
+    if (initialLoadAttemptedRef.current) {
+      setState((prev) => ({ ...prev, loading: false }));
+      return;
+    }
+
     initialLoadAttemptedRef.current = true;
 
     const getSession = async () => {
