@@ -1,9 +1,8 @@
 {
   "/page": "app/page.js",
-  "/auth/callback/route": "app/auth/callback/route.js",
-  "/calculator/page": "app/calculator/page.js",
-  "/vehicle-overview/page": "app/vehicle-overview/page.js",
+  "/codelock/page": "app/codelock/page.js",
+  "/profile/page": "app/profile/page.js",
+  "/middleman/dashboard/page": "app/middleman/dashboard/page.js",
   "/middleman/page": "app/middleman/page.js",
-  "/server-status/page": "app/server-status/page.js",
   "/admin/page": "app/admin/page.js"
 }

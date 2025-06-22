@@ -9,8 +9,8 @@ import { createClient } from '@/lib/supabase/client'
 import { getDiscordId } from '@/lib/utils'
 
 // Configuration
-const DISCOUNT_ENABLED = true
-const ORIGINAL_PRICE = 3000000
+const DISCOUNT_ENABLED = false
+const ORIGINAL_PRICE = 2500000
 const DISCOUNT_RATE = 0.15
 const DISCOUNTED_PRICE = ORIGINAL_PRICE * (1 - DISCOUNT_RATE)
 const TRIAL_DAYS = 3
@@ -297,7 +297,7 @@ export default function WhitelistPage() {
                 <span className="absolute left-0 text-[#ffd700] font-bold">✦</span>
                 Purchase price is 
                 <span className={`text-[#ffd700] font-semibold text-xl ${DISCOUNT_ENABLED ? 'line-through opacity-60' : ''}`}>
-                  {' '}E${ORIGINAL_PRICE.toLocaleString()}
+                  {' '}ELAN${ORIGINAL_PRICE.toLocaleString()}
                 </span>
                 {DISCOUNT_ENABLED && (
                   <>
