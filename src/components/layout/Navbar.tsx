@@ -98,9 +98,6 @@ export function Navbar() {
     };
   }, [isMenuOpen]);
 
-  // Remove the loading state return - let navbar render immediately
-  // This prevents the blocking loading state mentioned in the optimization
-
   //Check if user is a middleman
   const isMiddleman = isUserMiddleman(user);
 
