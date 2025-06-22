@@ -40,7 +40,7 @@ export const useAuth = () => {
 
 // Configuration constants
 const AUTH_CACHE_KEY = 'auth_cache_v2'
-const AUTH_CACHE_TTL = 10 * 60 * 1000 // 10 minutes (increased from 5)
+const AUTH_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
 const MAX_RETRY_ATTEMPTS = 3
 const RETRY_DELAY = 1000 // 1 second
 
@@ -65,7 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const initialLoadAttemptedRef = useRef(false)
   const authChangeListenerRef = useRef<any>(null)
   
-  const supabase = createClient()
+  // Create the Supabase client once and reuse it
+  const supabase = useRef(createClient()).current
 
   // Load cached auth data on initial render
   useEffect(() => {
@@ -162,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState(newState)
       setLastUpdated(Date.now())
       
-      // Cache the updated auth data with longer TTL
+      // Cache the updated auth data
       localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
         data: newState,
         timestamp: Date.now()
@@ -360,7 +361,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearInterval(refreshIntervalRef.current)
       }
     }
-  }, [])
+  }, [supabase]) // Add supabase as dependency
 
   // Set up periodic refresh for active sessions
   useEffect(() => {
