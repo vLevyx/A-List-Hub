@@ -231,7 +231,7 @@ const itemsByCategory: { [key: string]: string[] } = {
 // Local storage keys
 const PROFILE_CACHE_KEY = "profile_data_cache";
 const BLUEPRINTS_CACHE_KEY = "blueprints_cache";
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
 interface UserProfile {
   created_at: string | null;
