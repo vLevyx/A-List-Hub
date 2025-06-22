@@ -98,13 +98,10 @@ export function Navbar() {
     };
   }, [isMenuOpen]);
 
-  // Remove the loading state return - let navbar render immediately
-  // This prevents the blocking loading state mentioned in the optimization
-
   //Check if user is a middleman
   const isMiddleman = isUserMiddleman(user);
 
-  if (loading) {
+  if (loading && !user) {
     return (
       <nav className="backdrop-blur-md bg-background-secondary/60 border-b border-white/5 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

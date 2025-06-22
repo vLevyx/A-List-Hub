@@ -337,7 +337,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    getSession();
+    if (typeof window !== "undefined") {
+      getSession();
+    }
 
     // Set up auth state change listener
     const {
