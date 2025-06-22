@@ -5,6 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// Middleman Discord IDs (matching your Supabase function)
+const MIDDLEMAN_DISCORD_IDS = [
+  "154388953053659137",
+  "344637470908088322", 
+  "487476487386038292",
+  "492053410967846933"
+]
+
 // User data extraction utilities with enhanced error handling
 export function getDiscordId(user: any): string | null {
   if (!user) return null
@@ -30,6 +38,22 @@ export function getDiscordId(user: any): string | null {
     return null
   }
 }
+
+// Check if user is a middleman (client-side check)
+export function isUserMiddleman(user: any): boolean {
+  if (!user) return false
+  
+  try {
+    const discordId = getDiscordId(user)
+    return discordId ? MIDDLEMAN_DISCORD_IDS.includes(discordId) : false
+  } catch (error) {
+    console.error('Error checking middleman status:', error)
+    return false
+  }
+}
+
+// Export the middleman IDs for use in other components if needed
+export { MIDDLEMAN_DISCORD_IDS }
 
 export function getUsername(user: any): string {
   if (!user) return 'Discord User'

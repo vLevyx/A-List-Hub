@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import { useAuth } from '@/hooks/useAuth'
 import { FeatureCard } from './FeatureCard'
+import { useState, useEffect } from 'react'
 
 const features = [
   {
@@ -30,6 +31,13 @@ const features = [
     title: 'Vehicle Overview',
     href: '/vehicle-overview',
     requiresAccess: false
+  },
+  {
+    title: 'Middleman Market',
+    href: '/middleman',
+    requiresAccess: false,
+    tag: 'New!',
+    tagType: 'new' as const
   },
   {
     title: 'OverFuel+',
@@ -60,71 +68,78 @@ const features = [
 
 export function HeroSection() {
   const { hasAccess } = useAuth()
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   return (
     <section className="relative py-20 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="bg-background-secondary/70 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl"
-        >
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="text-4xl sm:text-5xl font-bold text-primary-500 mb-4"
-          >
+        <div className="bg-background-secondary/70 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
+          {/* Static content first for immediate render */}
+          <h1 className="text-4xl sm:text-5xl font-bold text-primary-500 mb-4">
             A-List Hub
-          </motion.h1>
+          </h1>
           
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="text-xl text-white/90 mb-8"
-          >
+          <p className="text-xl text-white/90 mb-8">
             <strong>Everything</strong> you need, <strong>nothing</strong> you don't.
-          </motion.p>
+          </p>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-          >
+          {/* Only animate after client hydration */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {features.map((feature, index) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.4 + index * 0.1 }}
-              >
-                <FeatureCard
-                  {...feature}
-                  hasAccess={hasAccess}
-                />
-              </motion.div>
+              isClient ? (
+                <motion.div
+                  key={feature.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.4 + index * 0.1 }}
+                >
+                  <FeatureCard
+                    {...feature}
+                    hasAccess={hasAccess}
+                  />
+                </motion.div>
+              ) : (
+                <div key={feature.title}>
+                  <FeatureCard
+                    {...feature}
+                    hasAccess={hasAccess}
+                  />
+                </div>
+              )
             ))}
-          </motion.div>
+          </div>
 
           {!hasAccess && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.8 }}
-              className="mt-8"
-            >
-              <a
-                href="/whitelist"
-                className="inline-block bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-bold py-4 px-8 rounded-xl text-lg hover:from-yellow-500 hover:to-yellow-700 transform hover:-translate-y-1 transition-all duration-300 shadow-lg hover:shadow-xl"
+            isClient ? (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.8 }}
+                className="mt-8"
               >
-                🔓 Unlock Plus Features
-              </a>
-            </motion.div>
+                <a
+                  href="/whitelist"
+                  className="inline-block bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-bold py-4 px-8 rounded-xl text-lg hover:from-yellow-500 hover:to-yellow-700 transform hover:-translate-y-1 transition-all duration-300 shadow-lg hover:shadow-xl"
+                >
+                  🔓 Unlock Plus Features
+                </a>
+              </motion.div>
+            ) : (
+              <div className="mt-8">
+                <a
+                  href="/whitelist"
+                  className="inline-block bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-bold py-4 px-8 rounded-xl text-lg hover:from-yellow-500 hover:to-yellow-700 transform hover:-translate-y-1 transition-all duration-300 shadow-lg hover:shadow-xl"
+                >
+                  🔓 Unlock Plus Features
+                </a>
+              </div>
+            )
           )}
-        </motion.div>
+        </div>
       </div>
     </section>
   )

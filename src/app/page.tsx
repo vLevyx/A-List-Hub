@@ -1,14 +1,10 @@
-'use client'
-
-import { usePageTracking } from '@/hooks/usePageTracking'
 import { HeroSection } from '@/components/home/HeroSection'
 import { TipSection } from '@/components/home/TipSection'
 import { AboutSection } from '@/components/home/AboutSection'
 import { TestimonialsSection } from '@/components/home/TestimonialsSection'
+import ClientWrapper from '@/components/ClientWrapper'
 
 export default function HomePage() {
-  usePageTracking()
-
   return (
     <div className="relative">
       {/* Background Effects */}
@@ -25,6 +21,9 @@ export default function HomePage() {
         <AboutSection />
         <TestimonialsSection />
       </div>
+      
+      {/* Move client-side functionality to bottom */}
+      <ClientWrapper />
     </div>
   )
 }

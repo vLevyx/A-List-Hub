@@ -1,1997 +1,2156 @@
-'use client'
+"use client";
 
-import { useEffect, useState, useRef, useCallback } from 'react'
-import { usePageTracking } from '@/hooks/usePageTracking'
-import { useAuth } from '@/hooks/useAuth'
-import { createClient } from '@/lib/supabase/client'
-import Link from 'next/link'
-import { getDiscordId } from '@/lib/utils'
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useAuth } from "@/hooks/useAuth";
+import { usePageTracking } from "@/hooks/usePageTracking";
+import { createClient } from "@/lib/supabase/client";
+import { getDiscordId, formatDate, timeAgo } from "@/lib/utils";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { Button } from "@/components/ui/Button";
 
-// Custom tabs component to avoid dependency on @radix-ui
-const Tabs = ({ children }: { children: React.ReactNode }) => children
-
-const TabsList = ({ children, className = '' }: { children: React.ReactNode, className?: string }) => (
-  <div className={`inline-flex h-12 items-center justify-center rounded-lg bg-white/5 p-1 text-white/70 ${className}`}>
-    {children}
-  </div>
-)
-
-const TabsTrigger = ({ 
-  children, 
-  value, 
-  onClick, 
-  active, 
-  className = '' 
-}: { 
-  children: React.ReactNode, 
-  value: string, 
-  onClick: (value: string) => void, 
-  active: boolean, 
-  className?: string 
-}) => (
-  <button
-    onClick={() => onClick(value)}
-    className={`inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-all focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 ${
-      active ? 'bg-[#00c6ff] text-black shadow-sm' : 'hover:bg-white/10'
-    } ${className}`}
-  >
-    {children}
-  </button>
-)
-
-const TabsContent = ({ 
-  children, 
-  value, 
-  activeValue, 
-  className = '' 
-}: { 
-  children: React.ReactNode, 
-  value: string, 
-  activeValue: string, 
-  className?: string 
-}) => (
-  <div className={`mt-2 ${value === activeValue ? 'block' : 'hidden'} ${className}`}>
-    {children}
-  </div>
-)
+// Admin IDs that have access
+const ADMIN_DISCORD_IDS = [
+  "154388953053659137",
+  "344637470908088322",
+  "796587763851198474",
+  "492053410967846933",
+  "487476487386038292",
+];
 
 // Types
 interface User {
-  id: string | null
-  username: string | null
-  created_at: string
-  revoked: boolean | null
-  discord_id: string
-  last_login: string | null
-  login_count: number | null
-  hub_trial: boolean | null
-  trial_expiration: string | null
+  id: string | null;
+  discord_id: string;
+  username: string | null;
+  created_at: string;
+  revoked: boolean | null;
+  last_login: string | null;
+  login_count: number | null;
+  hub_trial: boolean | null;
+  trial_expiration: string | null;
 }
 
 interface AdminLog {
-  id: string
-  admin_id: string | null
-  admin_name: string | null
-  action: string | null
-  target_discord_id: string | null
-  created_at: string | null
-  description: string | null
+  id: string;
+  admin_id: string | null;
+  admin_name: string | null;
+  action: string | null;
+  target_discord_id: string | null;
+  created_at: string | null;
+  description: string | null;
 }
 
 interface PageSession {
-  id: string
-  discord_id: string
-  username: string | null
-  page_path: string
-  enter_time: string | null
-  exit_time: string | null
-  time_spent_seconds: number | null
-  is_active: boolean | null
+  id: string;
+  discord_id: string;
+  username: string | null;
+  page_path: string;
+  enter_time: string | null;
+  exit_time: string | null;
+  time_spent_seconds: number | null;
+  is_active: boolean | null;
 }
 
 interface PageAnalytics {
-  page_path: string
-  time_spent_seconds: number
-  username: string | null
+  page_path: string;
+  total_time: number;
+  sessions: number;
 }
 
-interface UserPageData {
-  [username: string]: {
-    [page_path: string]: number[]
-  }
+interface UserPageAnalytics {
+  page_path: string;
+  total_time: number;
+  sessions: number;
+  avg_time: number;
 }
 
-interface ToastProps {
-  message: string
-  type: 'success' | 'error' | 'info'
-  onClose: () => void
+interface StatusMessage {
+  type: "success" | "error" | "info" | "warning" | null;
+  message: string;
 }
 
-// Toast component
-const Toast = ({ message, type, onClose }: ToastProps) => {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose()
-    }, 5000)
-    
-    return () => clearTimeout(timer)
-  }, [onClose])
-  
-  return (
-    <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-md border-l-4 ${
-      type === 'success' ? 'bg-green-900/80 border-green-500 text-green-100' :
-      type === 'error' ? 'bg-red-900/80 border-red-500 text-red-100' :
-      'bg-blue-900/80 border-blue-500 text-blue-100'
-    } backdrop-blur-md`}>
-      <div className="flex items-start">
-        <div className="flex-1">
-          {message}
-        </div>
-        <button 
-          onClick={onClose}
-          className="ml-4 text-white/70 hover:text-white"
-        >
-          ×
-        </button>
-      </div>
-    </div>
-  )
-}
+export default function AdminPage() {
+  usePageTracking();
+  const router = useRouter();
+  const { user, loading } = useAuth();
+  const supabase = createClient();
 
-export default function AdminDashboardPage() {
-  usePageTracking()
-  const { user, loading } = useAuth()
-  const supabase = createClient()
-  
-  // Tab state
-  const [activeTab, setActiveTab] = useState('users')
-  
-  // User management state
-  const [users, setUsers] = useState<User[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
-  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
-  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
-  const [sidePanelOpen, setSidePanelOpen] = useState(false)
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
-  const [filterStatus, setFilterStatus] = useState('all')
-  const [filterActivity, setFilterActivity] = useState('all')
-  const [filterType, setFilterType] = useState('all')
-  const [filterDateRange, setFilterDateRange] = useState('all')
-  const [sortBy, setSortBy] = useState('last_login')
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null)
-  const [auditLogs, setAuditLogs] = useState<AdminLog[]>([])
-  const [userBlueprints, setUserBlueprints] = useState<string[]>([])
-  
-  // Analytics state
-  const [pageData, setPageData] = useState<PageAnalytics[]>([])
-  const [userData, setUserData] = useState<UserPageData>({})
-  const [selectedAnalyticsUser, setSelectedAnalyticsUser] = useState('')
-  const [minTime, setMinTime] = useState(0)
-  const [sortByAnalytics, setSortByAnalytics] = useState('time')
-  const [pagesLimit, setPagesLimit] = useState(15)
-  const [logsPage, setLogsPage] = useState(0)
-  const [logsLimit, setLogsLimit] = useState(15)
-  const [filterAdmin, setFilterAdmin] = useState('')
-  const [filterAction, setFilterAction] = useState('')
-  const [filterDesc, setFilterDesc] = useState('')
-  const [filterTarget, setFilterTarget] = useState('')
-  
-  // Admin IDs
-  const adminDiscordIds = [
-    "154388953053659137",
-    "344637470908088322",
-    "796587763851198474",
-    "492053410967846933",
-    "487476487386038292"
-  ]
-  
+  // State for users
+  const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [userStatusFilter, setUserStatusFilter] = useState<
+    "all" | "whitelisted" | "revoked" | "trial"
+  >("all");
+  const [userPage, setUserPage] = useState(0);
+  const [userLimit, setUserLimit] = useState(15);
+  const [userCount, setUserCount] = useState(0);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [userBlueprints, setUserBlueprints] = useState<string[]>([]);
+  const [userDetailOpen, setUserDetailOpen] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+
+  // State for logs
+  const [logs, setLogs] = useState<AdminLog[]>([]);
+  const [logPage, setLogPage] = useState(0);
+  const [logLimit, setLogLimit] = useState(15);
+  const [logCount, setLogCount] = useState(0);
+  const [logFilters, setLogFilters] = useState({
+    admin: "",
+    action: "",
+    target: "",
+  });
+
+  // State for analytics
+  const [pageAnalytics, setPageAnalytics] = useState<PageAnalytics[]>([]);
+  const [topUsers, setTopUsers] = useState<
+    { username: string; time_spent: number; sessions: number }[]
+  >([]);
+  const [selectedAnalyticsUser, setSelectedAnalyticsUser] = useState<
+    string | null
+  >(null);
+  const [userPageAnalytics, setUserPageAnalytics] = useState<
+    UserPageAnalytics[]
+  >([]);
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+
+  // UI state
+  const [activeTab, setActiveTab] = useState("users");
+  const [loadingState, setLoadingState] = useState({
+    users: true,
+    logs: true,
+    analytics: true,
+    action: false,
+    refreshing: false,
+  });
+  const [statusMessage, setStatusMessage] = useState<StatusMessage>({
+    type: null,
+    message: "",
+  });
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Refs
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const userDetailRef = useRef<HTMLDivElement>(null);
+
   // Check if user is admin
   const isAdmin = useCallback(() => {
-    if (!user) return false
-    const discordId = getDiscordId(user)
-    return discordId ? adminDiscordIds.includes(discordId) : false
-  }, [user, adminDiscordIds])
-  
+    if (!user) return false;
+
+    const discordId = getDiscordId(user);
+    return !!discordId && ADMIN_DISCORD_IDS.includes(discordId);
+  }, [user]);
+
   // Redirect if not admin
   useEffect(() => {
-    if (!loading && (!user || !isAdmin())) {
-      window.location.href = '/'
+    if (!loading && !isAdmin()) {
+      router.push("/");
     }
-  }, [loading, user, isAdmin])
-  
+  }, [loading, isAdmin, router]);
+
+  // Load users with pagination and filtering
+  const loadUsers = useCallback(
+    async (page = 0, limit = 15, search = "", status = "all") => {
+      setLoadingState((prev) => ({ ...prev, users: true }));
+
+      try {
+        let query = supabase.from("users").select("*", { count: "exact" });
+
+        // Apply status filter
+        if (status === "whitelisted") {
+          query = query.eq("revoked", false);
+        } else if (status === "revoked") {
+          query = query.eq("revoked", true);
+        } else if (status === "trial") {
+          query = query.eq("hub_trial", true);
+        }
+
+        // Apply search filter if provided
+        if (search) {
+          query = query.or(
+            `username.ilike.%${search}%,discord_id.ilike.%${search}%`
+          );
+        }
+
+        // Get count first
+        const { count, error: countError } = await query;
+
+        if (countError) {
+          console.error("Error getting user count:", countError);
+          return;
+        }
+
+        setUserCount(count || 0);
+
+        // Then get paginated data
+        const { data, error } = await query
+          .order("last_login", { ascending: false, nullsFirst: false })
+          .range(page * limit, page * limit + limit - 1);
+
+        if (error) {
+          console.error("Error loading users:", error);
+          return;
+        }
+
+        setUsers(data || []);
+        setFilteredUsers(data || []);
+
+        // Track online users (last login within 5 minutes)
+        const now = new Date();
+        const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+
+        const onlineUserIds = new Set(
+          data
+            ?.filter(
+              (u) => u.last_login && new Date(u.last_login) > fiveMinutesAgo
+            )
+            .map((u) => u.discord_id) || []
+        );
+
+        setOnlineUsers(onlineUserIds);
+      } catch (error) {
+        console.error("Failed to load users:", error);
+      } finally {
+        setLoadingState((prev) => ({ ...prev, users: false }));
+      }
+    },
+    [supabase]
+  );
+
+  // Load logs with pagination and filtering
+  const loadLogs = useCallback(
+    async (
+      page = 0,
+      limit = 15,
+      filters = { admin: "", action: "", target: "" }
+    ) => {
+      setLoadingState((prev) => ({ ...prev, logs: true }));
+
+      try {
+        let query = supabase.from("admin_logs").select("*", { count: "exact" });
+
+        // Apply filters
+        if (filters.admin) {
+          query = query.ilike("admin_name", `%${filters.admin}%`);
+        }
+
+        if (filters.action) {
+          query = query.ilike("action", `%${filters.action}%`);
+        }
+
+        if (filters.target) {
+          query = query.ilike("target_discord_id", `%${filters.target}%`);
+        }
+
+        // Get count first
+        const { count, error: countError } = await query;
+
+        if (countError) {
+          console.error("Error getting log count:", countError);
+          return;
+        }
+
+        setLogCount(count || 0);
+
+        // Then get paginated data
+        const { data, error } = await query
+          .order("created_at", { ascending: false })
+          .range(page * limit, page * limit + limit - 1);
+
+        if (error) {
+          console.error("Error loading logs:", error);
+          return;
+        }
+
+        setLogs(data || []);
+      } catch (error) {
+        console.error("Failed to load logs:", error);
+      } finally {
+        setLoadingState((prev) => ({ ...prev, logs: false }));
+      }
+    },
+    [supabase]
+  );
+
+  // Load analytics data
+  const loadAnalytics = useCallback(async () => {
+    setLoadingState((prev) => ({ ...prev, analytics: true }));
+
+    try {
+      // Get page analytics
+      const { data: pageData, error: pageError } = await supabase
+        .from("page_sessions")
+        .select("page_path, time_spent_seconds, username")
+        .not("time_spent_seconds", "is", null);
+
+      if (pageError) {
+        console.error("Error loading page analytics:", pageError);
+        return;
+      }
+
+      // Process page data
+      const pageMap = new Map<string, { time: number; sessions: number }>();
+
+      pageData?.forEach((session) => {
+        const path = session.page_path;
+        const time = session.time_spent_seconds || 0;
+
+        if (!pageMap.has(path)) {
+          pageMap.set(path, { time: 0, sessions: 0 });
+        }
+
+        const entry = pageMap.get(path)!;
+        entry.time += time;
+        entry.sessions += 1;
+      });
+
+      // Convert to array and sort by time spent
+      const pageAnalytics = Array.from(pageMap.entries()).map(
+        ([page_path, data]) => ({
+          page_path,
+          total_time: data.time,
+          sessions: data.sessions,
+        })
+      );
+
+      pageAnalytics.sort((a, b) => b.total_time - a.total_time);
+      setPageAnalytics(pageAnalytics);
+
+      // Process user data
+      const userMap = new Map<
+        string,
+        { time_spent: number; sessions: number }
+      >();
+
+      pageData?.forEach((session) => {
+        if (!session.username) return;
+
+        if (!userMap.has(session.username)) {
+          userMap.set(session.username, { time_spent: 0, sessions: 0 });
+        }
+
+        const entry = userMap.get(session.username)!;
+        entry.time_spent += session.time_spent_seconds || 0;
+        entry.sessions += 1;
+      });
+
+      // Convert to array and sort by time spent
+      const topUsers = Array.from(userMap.entries()).map(
+        ([username, data]) => ({
+          username,
+          time_spent: data.time_spent,
+          sessions: data.sessions,
+        })
+      );
+
+      topUsers.sort((a, b) => b.time_spent - a.time_spent);
+      setTopUsers(topUsers.slice(0, 10)); // Top 10 users
+    } catch (error) {
+      console.error("Failed to load analytics:", error);
+    } finally {
+      setLoadingState((prev) => ({ ...prev, analytics: false }));
+    }
+  }, [supabase]);
+
+  // Load user-specific page analytics
+  const loadUserPageAnalytics = useCallback(
+    async (username: string) => {
+      if (!username) return;
+
+      try {
+        const { data, error } = await supabase
+          .from("page_sessions")
+          .select("page_path, time_spent_seconds")
+          .eq("username", username)
+          .not("time_spent_seconds", "is", null);
+
+        if (error) {
+          console.error("Error loading user page analytics:", error);
+          return;
+        }
+
+        // Process page data for this user
+        const pageMap = new Map<string, { time: number; sessions: number }>();
+
+        data?.forEach((session) => {
+          const path = session.page_path;
+          const time = session.time_spent_seconds || 0;
+
+          if (!pageMap.has(path)) {
+            pageMap.set(path, { time: 0, sessions: 0 });
+          }
+
+          const entry = pageMap.get(path)!;
+          entry.time += time;
+          entry.sessions += 1;
+        });
+
+        // Convert to array and sort by time spent
+        const userPageAnalytics = Array.from(pageMap.entries()).map(
+          ([page_path, data]) => ({
+            page_path,
+            total_time: data.time,
+            sessions: data.sessions,
+            avg_time: data.time / data.sessions,
+          })
+        );
+
+        userPageAnalytics.sort((a, b) => b.total_time - a.total_time);
+        setUserPageAnalytics(userPageAnalytics);
+      } catch (error) {
+        console.error("Failed to load user page analytics:", error);
+      }
+    },
+    [supabase]
+  );
+
+  // Load user blueprints
+  const loadUserBlueprints = useCallback(
+    async (discordId: string) => {
+      try {
+        const { data, error } = await supabase
+          .from("user_blueprints")
+          .select("blueprint_name")
+          .eq("discord_id", discordId);
+
+        if (error) throw error;
+
+        setUserBlueprints(data?.map((bp) => bp.blueprint_name) || []);
+      } catch (error) {
+        console.error("Error loading blueprints:", error);
+        setUserBlueprints([]);
+      }
+    },
+    [supabase]
+  );
+
   // Initialize data
   useEffect(() => {
-    if (!loading && user && isAdmin()) {
-      loadUsers()
-      loadAuditLogs()
-      loadPageSessions()
-      setupRealtimeSubscriptions()
+    if (!loading && isAdmin()) {
+      loadUsers(userPage, userLimit, userSearch, userStatusFilter);
+      loadLogs(logPage, logLimit, logFilters);
+      loadAnalytics();
     }
-    
-    return () => {
-      // Clean up subscriptions
-      const subscription = supabase.channel('admin-changes')
-      supabase.removeChannel(subscription)
+  }, [
+    loading,
+    isAdmin,
+    loadUsers,
+    loadLogs,
+    loadAnalytics,
+    userPage,
+    userLimit,
+    userSearch,
+    userStatusFilter,
+    logPage,
+    logLimit,
+    logFilters,
+  ]);
+
+  // Load user page analytics when user is selected
+  useEffect(() => {
+    if (selectedAnalyticsUser) {
+      loadUserPageAnalytics(selectedAnalyticsUser);
+    } else {
+      setUserPageAnalytics([]);
     }
-  }, [loading, user, isAdmin])
-  
-  // Set up realtime subscriptions
-  const setupRealtimeSubscriptions = useCallback(() => {
-    const channel = supabase.channel('admin-changes')
-    
-    // Users table changes
-    channel.on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'users' },
-      (payload) => {
-        console.log('Users table changed:', payload)
-        loadUsers()
-      }
-    )
-    
-    // Admin logs changes
-    channel.on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'admin_logs' },
-      (payload) => {
-        console.log('Admin logs changed:', payload)
-        loadAuditLogs()
-      }
-    )
-    
-    // Page sessions changes
-    channel.on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'page_sessions' },
-      (payload) => {
-        console.log('Page sessions changed:', payload)
-        loadPageSessions()
-      }
-    )
-    
-    channel.subscribe()
-  }, [supabase])
-  
-  // Load users
-  const loadUsers = useCallback(async () => {
-    try {
-      setIsLoading(true)
-      
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false })
-      
-      if (error) throw error
-      
-      setUsers(data || [])
-      applyFiltersAndSort(data || [])
-      trackUserSessions(data || [])
-      
-    } catch (error) {
-      console.error('Error loading users:', error)
-      showToast('Failed to load users', 'error')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [supabase])
-  
-  // Load audit logs
-  const loadAuditLogs = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('admin_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .range(logsPage * logsLimit, (logsPage + 1) * logsLimit - 1)
-      
-      if (error) throw error
-      
-      setAuditLogs(data || [])
-    } catch (error) {
-      console.error('Error loading audit logs:', error)
-    }
-  }, [supabase, logsPage, logsLimit])
-  
-  // Load page sessions
-  const loadPageSessions = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('page_sessions')
-        .select('page_path, time_spent_seconds, username')
-        .not('time_spent_seconds', 'is', null)
-      
-      if (error) throw error
-      
-      // Process data for analytics
-      const sessions = data || []
-      setPageData(sessions)
-      
-      // Process user data
-      const userSessions: UserPageData = {}
-      
-      sessions.forEach(session => {
-        if (session.username) {
-          if (!userSessions[session.username]) {
-            userSessions[session.username] = {}
-          }
-          
-          if (!userSessions[session.username][session.page_path]) {
-            userSessions[session.username][session.page_path] = []
-          }
-          
-          if (session.time_spent_seconds) {
-            userSessions[session.username][session.page_path].push(session.time_spent_seconds)
-          }
+  }, [selectedAnalyticsUser, loadUserPageAnalytics]);
+
+  // Set up real-time subscriptions
+  useEffect(() => {
+    if (!isAdmin()) return;
+
+    const usersChannel = supabase
+      .channel("admin-users-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "users" },
+        () => {
+          loadUsers(userPage, userLimit, userSearch, userStatusFilter);
         }
-      })
-      
-      setUserData(userSessions)
-      
-    } catch (error) {
-      console.error('Error loading page sessions:', error)
-    }
-  }, [supabase])
-  
-  // Track user sessions
-  const trackUserSessions = useCallback(async (users: User[]) => {
-    try {
-      // Get users who logged in within the last 5 minutes
-      const recentUsers = users.filter(user => {
-        if (!user.last_login) return false
-        const lastLogin = new Date(user.last_login)
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
-        return lastLogin > fiveMinutesAgo
-      })
-      
-      const onlineIds = new Set(recentUsers.map(user => user.discord_id))
-      setOnlineUsers(onlineIds)
-      
-    } catch (error) {
-      console.error('Error tracking user sessions:', error)
-    }
-  }, [])
-  
-  // Load user blueprints
-  const loadUserBlueprints = useCallback(async (discordId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('user_blueprints')
-        .select('blueprint_name')
-        .eq('discord_id', discordId)
-      
-      if (error) throw error
-      
-      setUserBlueprints(data?.map(bp => bp.blueprint_name) || [])
-    } catch (error) {
-      console.error('Error loading blueprints:', error)
-      setUserBlueprints([])
-    }
-  }, [supabase])
-  
-  // Apply filters and sort
-  const applyFiltersAndSort = useCallback((usersToFilter = users) => {
-    let filtered = [...usersToFilter]
-    
-    // Apply search filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      filtered = filtered.filter(user => 
-        user.discord_id.toLowerCase().includes(term) || 
-        (user.username && user.username.toLowerCase().includes(term))
       )
-    }
-    
-    // Apply status filter
-    if (filterStatus !== 'all') {
-      switch (filterStatus) {
-        case 'whitelisted':
-          filtered = filtered.filter(user => !user.revoked)
-          break
-        case 'revoked':
-          filtered = filtered.filter(user => user.revoked)
-          break
-        case 'trial':
-          filtered = filtered.filter(user => 
-            user.hub_trial && 
-            user.trial_expiration && 
-            new Date(user.trial_expiration) > new Date()
-          )
-          break
+      .subscribe();
+
+    const logsChannel = supabase
+      .channel("admin-logs-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "admin_logs" },
+        () => {
+          loadLogs(logPage, logLimit, logFilters);
+        }
+      )
+      .subscribe();
+
+    const analyticsChannel = supabase
+      .channel("admin-analytics-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "page_sessions" },
+        () => {
+          // Debounce analytics updates to avoid excessive refreshes
+          if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+          }
+
+          searchTimeoutRef.current = setTimeout(() => {
+            loadAnalytics();
+            if (selectedAnalyticsUser) {
+              loadUserPageAnalytics(selectedAnalyticsUser);
+            }
+          }, 5000);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(usersChannel);
+      supabase.removeChannel(logsChannel);
+      supabase.removeChannel(analyticsChannel);
+
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
       }
-    }
-    
-    // Apply activity filter
-    if (filterActivity !== 'all') {
-      const now = new Date()
-      switch (filterActivity) {
-        case 'active_24h':
-          filtered = filtered.filter(user => 
-            user.last_login && 
-            new Date(user.last_login) > new Date(now.getTime() - 24 * 60 * 60 * 1000)
-          )
-          break
-        case 'active_7d':
-          filtered = filtered.filter(user => 
-            user.last_login && 
-            new Date(user.last_login) > new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-          )
-          break
-        case 'active_30d':
-          filtered = filtered.filter(user => 
-            user.last_login && 
-            new Date(user.last_login) > new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-          )
-          break
-        case 'never_logged':
-          filtered = filtered.filter(user => !user.last_login)
-          break
+    };
+  }, [
+    isAdmin,
+    loadUsers,
+    loadLogs,
+    loadAnalytics,
+    loadUserPageAnalytics,
+    userPage,
+    userLimit,
+    userSearch,
+    userStatusFilter,
+    logPage,
+    logLimit,
+    logFilters,
+    selectedAnalyticsUser,
+    supabase,
+  ]);
+
+  // Real-time log refresh for selected user
+  useEffect(() => {
+    if (!selectedUser || !isAdmin()) return;
+
+    // Set up real-time subscription for logs related to the selected user
+    const userLogsChannel = supabase
+      .channel(`user-logs-${selectedUser.discord_id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "admin_logs",
+          filter: `target_discord_id=eq.${selectedUser.discord_id}`,
+        },
+        () => {
+          // Refresh logs when new log entry is added for this user
+          loadLogs(logPage, logLimit, logFilters);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(userLogsChannel);
+    };
+  }, [
+    selectedUser,
+    isAdmin,
+    supabase,
+    loadLogs,
+    logPage,
+    logLimit,
+    logFilters,
+  ]);
+
+  // Close user detail panel when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        userDetailRef.current &&
+        !userDetailRef.current.contains(event.target as Node)
+      ) {
+        setUserDetailOpen(false);
       }
+    };
+
+    if (userDetailOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
     }
-    
-    // Apply type filter
-    if (filterType !== 'all') {
-      switch (filterType) {
-        case 'admin':
-          filtered = filtered.filter(user => adminDiscordIds.includes(user.discord_id))
-          break
-        case 'regular':
-          filtered = filtered.filter(user => 
-            !adminDiscordIds.includes(user.discord_id) && !user.hub_trial
-          )
-          break
-        case 'trial':
-          filtered = filtered.filter(user => user.hub_trial)
-          break
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [userDetailOpen]);
+
+  // User search with debouncing
+  const handleUserSearch = (value: string) => {
+    setUserSearch(value);
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      setUserPage(0); // Reset to first page
+      loadUsers(0, userLimit, value, userStatusFilter);
+    }, 300);
+  };
+
+  // Format time in minutes and seconds
+  const formatTime = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`;
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+
+    if (remainingSeconds === 0) return `${minutes}m`;
+    return `${minutes}m ${remainingSeconds}s`;
+  };
+
+  // Add this function right after your existing formatTime function
+  const formatLastLogin = (dateString: string | null) => {
+    if (!dateString) return "Never";
+
+    const now = new Date();
+    const loginDate = new Date(dateString);
+    const diffMs = now.getTime() - loginDate.getTime();
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMinutes < 60) {
+      return `${diffMinutes}m ago`;
+    } else if (diffHours < 24) {
+      return `${diffHours}h ago`;
+    } else if (diffDays < 365) {
+      return `${diffDays}d ago`;
+    } else {
+      // Over 365 days - show exact date
+      return loginDate.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    }
+  };
+
+  // Admin actions
+  const performUserAction = async (
+    action: string,
+    userId: string,
+    username: string
+  ) => {
+    if (!user) return;
+
+    setLoadingState((prev) => ({ ...prev, action: true }));
+    setStatusMessage({ type: null, message: "" });
+
+    try {
+      const adminId = getDiscordId(user);
+      const adminName =
+        user.user_metadata?.full_name || user.user_metadata?.name || "Admin";
+
+      if (!adminId) {
+        throw new Error("Could not determine admin ID");
       }
-    }
-    
-    // Apply date range filter
-    if (filterDateRange !== 'all') {
-      const now = new Date()
-      let startDate: Date
-      
-      switch (filterDateRange) {
-        case 'today':
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-          break
-        case 'week':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-          break
-        case 'month':
-          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-          break
-        case 'quarter':
-          startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-          break
+
+      let description = "";
+      let rpcFunction = "";
+      let rpcParams: any = {};
+
+      switch (action) {
+        case "WHITELIST":
+          description = `Whitelisted action performed`;
+          rpcFunction = "admin_whitelist_user";
+          rpcParams = { target_discord_id: userId };
+          break;
+
+        case "REVOKE":
+          description = `Revoked access performed`;
+          rpcFunction = "admin_revoke_user";
+          rpcParams = { target_discord_id: userId };
+          break;
+
+        case "TRIAL_7":
+          description = `7 Day Trial Action Performed`;
+          rpcFunction = "admin_add_trial";
+          rpcParams = { target_discord_id: userId, days: 7 };
+          break;
+
+        case "TRIAL_30":
+          description = `30 Day Trial Action Performed`;
+          rpcFunction = "admin_add_trial";
+          rpcParams = { target_discord_id: userId, days: 30 };
+          break;
+
+        case "CONVERT_TRIAL":
+          description = `Converted trial to permanent`;
+          rpcFunction = "admin_whitelist_user";
+          rpcParams = { target_discord_id: userId };
+          break;
+
         default:
-          startDate = new Date(0)
+          throw new Error("Invalid action");
       }
-      
-      filtered = filtered.filter(user => 
-        user.created_at && new Date(user.created_at) >= startDate
-      )
-    }
-    
-    // Apply sorting
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'username':
-          return (a.username || '').localeCompare(b.username || '')
-        case 'login_count':
-          return (b.login_count || 0) - (a.login_count || 0)
-        case 'created_at':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        case 'trial_expiration':
-          const aExp = a.trial_expiration ? new Date(a.trial_expiration).getTime() : 0
-          const bExp = b.trial_expiration ? new Date(b.trial_expiration).getTime() : 0
-          return bExp - aExp
-        default: // last_login
-          const aLogin = a.last_login ? new Date(a.last_login).getTime() : 0
-          const bLogin = b.last_login ? new Date(b.last_login).getTime() : 0
-          return bLogin - aLogin
+
+      // Create log entry
+      const { error: logError } = await supabase.from("admin_logs").insert([
+        {
+          admin_id: adminId,
+          admin_name: adminName,
+          action,
+          target_discord_id: userId,
+          description,
+        },
+      ]);
+
+      if (logError) {
+        throw logError;
       }
-    })
-    
-    setFilteredUsers(filtered)
-  }, [users, searchTerm, filterStatus, filterActivity, filterType, filterDateRange, sortBy, adminDiscordIds])
-  
-  // Show toast notification
-  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
-    setToast({ message, type })
-  }, [])
-  
-  // Log audit event
-  const logAuditEvent = useCallback(async (action: string, description: string, userId?: string) => {
-    if (!user) return
-    
-    try {
-      const adminId = getDiscordId(user)
-      const adminName = user.user_metadata?.full_name || user.user_metadata?.name || 'Unknown'
-      
-      const { error } = await supabase.from('admin_logs').insert([{
-        action,
-        description,
-        admin_id: adminId,
-        admin_name: adminName,
-        target_discord_id: userId,
-        created_at: new Date().toISOString()
-      }])
-      
-      if (error) throw error
-      
-    } catch (error) {
-      console.error('Failed to log audit event:', error)
-    }
-  }, [user, supabase])
-  
-  // User management functions
-  const addUser = useCallback(async (discordId: string, username: string) => {
-    if (!discordId) {
-      showToast('Discord ID is required', 'error')
-      return
-    }
-    
-    if (users.some(u => u.discord_id === discordId)) {
-      showToast('User already exists', 'info')
-      return
-    }
-    
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .insert([{
-          discord_id: discordId,
-          username: username || null,
-          revoked: false,
-          created_at: new Date().toISOString()
-        }])
-        .select()
-      
-      if (error) throw error
-      
-      showToast('User whitelisted successfully', 'success')
-      logAuditEvent('whitelist', `User ${username || discordId} whitelisted`, discordId)
-      
-    } catch (error) {
-      console.error('Error adding user:', error)
-      showToast('Failed to whitelist user', 'error')
-    }
-  }, [users, supabase, showToast, logAuditEvent])
-  
-  // Update user status
-  const updateUserStatus = useCallback(async (discordId: string, revoked: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ revoked })
-        .eq('discord_id', discordId)
-      
-      if (error) throw error
-      
-      const action = revoked ? 'revoke' : 'whitelist'
-      const actionText = revoked ? 'revoked' : 'whitelisted'
-      
-      showToast(`User ${actionText} successfully`, 'success')
-      logAuditEvent(action, `${revoked ? 'Revoke' : 'Whitelist'} action performed`, discordId)
-      
-      // Update selected user if panel is open
-      if (selectedUser?.discord_id === discordId) {
-        setSelectedUser(prev => prev ? { ...prev, revoked } : null)
+
+      // Perform the action via RPC if needed
+      if (rpcFunction) {
+        const { error: rpcError } = await supabase.rpc(rpcFunction, rpcParams);
+
+        if (rpcError) {
+          throw rpcError;
+        }
       }
-      
-    } catch (error) {
-      console.error('Error updating user status:', error)
-      showToast('Failed to update user status', 'error')
-    }
-  }, [supabase, showToast, logAuditEvent, selectedUser])
-  
-  // Update trial time
-  const updateTrialTime = useCallback(async (discordId: string, days: number) => {
-    const trialExpiration = new Date()
-    trialExpiration.setDate(trialExpiration.getDate() + days)
-    
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          hub_trial: true,
-          trial_expiration: trialExpiration.toISOString()
-        })
-        .eq('discord_id', discordId)
-      
-      if (error) throw error
-      
-      showToast(`Trial extended by ${days} days`, 'success')
-      logAuditEvent('trial', `${days} Day Trial action performed`, discordId)
-      
-      // Update selected user if panel is open
-      if (selectedUser?.discord_id === discordId) {
-        setSelectedUser(prev => prev ? { 
-          ...prev, 
-          hub_trial: true,
-          trial_expiration: trialExpiration.toISOString()
-        } : null)
+
+      // Show success message
+      setStatusMessage({
+        type: "success",
+        message: `Successfully ${action
+          .toLowerCase()
+          .replace("_", " ")} for user ${username}`,
+      });
+
+      // Refresh data
+      loadUsers(userPage, userLimit, userSearch, userStatusFilter);
+
+      // **NEW: Auto-refresh the selected user data in the side panel**
+      if (selectedUser && selectedUser.discord_id === userId) {
+        // Fetch updated user data
+        const { data: updatedUserData, error: userError } = await supabase
+          .from("users")
+          .select("*")
+          .eq("discord_id", userId)
+          .single();
+
+        if (!userError && updatedUserData) {
+          setSelectedUser(updatedUserData);
+        }
+
+        // Refresh user blueprints
+        loadUserBlueprints(userId);
       }
-      
-    } catch (error) {
-      console.error('Error updating trial:', error)
-      showToast('Failed to update trial', 'error')
-    }
-  }, [supabase, showToast, logAuditEvent, selectedUser])
-  
-  // Convert trial to permanent
-  const convertTrialToPermanent = useCallback(async (discordId: string) => {
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          revoked: false,
-          trial_expiration: null
-        })
-        .eq('discord_id', discordId)
-      
-      if (error) throw error
-      
-      showToast('User converted to permanent whitelist', 'success')
-      logAuditEvent('whitelist', 'Trial converted to permanent whitelist', discordId)
-      
-      // Update selected user if panel is open
-      if (selectedUser?.discord_id === discordId) {
-        setSelectedUser(prev => prev ? { 
-          ...prev, 
-          revoked: false,
-          trial_expiration: null
-        } : null)
+
+      // Close user detail panel
+      if (action === "CONVERT_TRIAL") {
+        setUserDetailOpen(false);
       }
-      
     } catch (error) {
-      console.error('Error converting trial:', error)
-      showToast('Failed to convert trial to permanent', 'error')
+      console.error(`Error performing ${action}:`, error);
+      setStatusMessage({
+        type: "error",
+        message: `Failed to ${action.toLowerCase().replace("_", " ")}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      });
+    } finally {
+      setLoadingState((prev) => ({ ...prev, action: false }));
+
+      // Clear status message after 3 seconds
+      setTimeout(() => {
+        setStatusMessage({ type: null, message: "" });
+      }, 3000);
     }
-  }, [supabase, showToast, logAuditEvent, selectedUser])
-  
-  // Delete user
-  const deleteUser = useCallback(async (discordId: string) => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      return
-    }
-    
+  };
+
+  // Bulk actions
+  const performBulkAction = async (action: string) => {
+    if (!user || selectedUsers.size === 0) return;
+
+    setLoadingState((prev) => ({ ...prev, action: true }));
+
     try {
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('discord_id', discordId)
-      
-      if (error) throw error
-      
-      showToast('User deleted successfully', 'success')
-      logAuditEvent('delete', `User deleted`, discordId)
-      
-      // Close side panel if open
-      if (selectedUser?.discord_id === discordId) {
-        setSidePanelOpen(false)
-        setSelectedUser(null)
+      const adminId = getDiscordId(user);
+      const adminName =
+        user.user_metadata?.full_name || user.user_metadata?.name || "Admin";
+
+      if (!adminId) {
+        throw new Error("Could not determine admin ID");
       }
-      
-      // Remove from selected users
-      setSelectedUsers(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(discordId)
-        return newSet
-      })
-      
-    } catch (error) {
-      console.error('Error deleting user:', error)
-      showToast('Failed to delete user', 'error')
-    }
-  }, [supabase, showToast, logAuditEvent, selectedUser])
-  
-  // Bulk operations
-  const bulkWhitelist = useCallback(async () => {
-    if (selectedUsers.size === 0) {
-      showToast('No users selected', 'info')
-      return
-    }
-    
-    if (!confirm(`Whitelist ${selectedUsers.size} selected users?`)) {
-      return
-    }
-    
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ revoked: false })
-        .in('discord_id', Array.from(selectedUsers))
-      
-      if (error) throw error
-      
-      showToast(`${selectedUsers.size} users whitelisted`, 'success')
-      logAuditEvent('bulk_whitelist', `Bulk Whitelist action performed for ${selectedUsers.size} users`)
-      
+
+      const userIds = Array.from(selectedUsers);
+      let description = "";
+      let updateData: any = {};
+
+      switch (action) {
+        case "WHITELIST":
+          description = `Bulk whitelisted ${userIds.length} users`;
+          updateData = { revoked: false };
+          break;
+
+        case "REVOKE":
+          description = `Bulk revoked access for ${userIds.length} users`;
+          updateData = { revoked: true };
+          break;
+
+        case "TRIAL_7":
+          description = `Bulk added 7-day trial for ${userIds.length} users`;
+          const trialExpiration7 = new Date();
+          trialExpiration7.setDate(trialExpiration7.getDate() + 7);
+          updateData = {
+            hub_trial: true,
+            trial_expiration: trialExpiration7.toISOString(),
+          };
+          break;
+
+        case "TRIAL_30":
+          description = `Bulk added 30-day trial for ${userIds.length} users`;
+          const trialExpiration30 = new Date();
+          trialExpiration30.setDate(trialExpiration30.getDate() + 30);
+          updateData = {
+            hub_trial: true,
+            trial_expiration: trialExpiration30.toISOString(),
+          };
+          break;
+
+        default:
+          throw new Error("Invalid action");
+      }
+
+      // Update users
+      const { error: updateError } = await supabase
+        .from("users")
+        .update(updateData)
+        .in("discord_id", userIds);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Create log entry
+      const { error: logError } = await supabase.from("admin_logs").insert([
+        {
+          admin_id: adminId,
+          admin_name: adminName,
+          action: `BULK_${action}`,
+          description,
+        },
+      ]);
+
+      if (logError) {
+        throw logError;
+      }
+
+      // Show success message
+      setStatusMessage({
+        type: "success",
+        message: `Successfully ${action.toLowerCase().replace("_", " ")} for ${
+          userIds.length
+        } users`,
+      });
+
       // Clear selection
-      setSelectedUsers(new Set())
-      
+      setSelectedUsers(new Set());
+
+      // Refresh data
+      loadUsers(userPage, userLimit, userSearch, userStatusFilter);
     } catch (error) {
-      console.error('Bulk whitelist error:', error)
-      showToast('Failed to whitelist users', 'error')
+      console.error(`Error performing bulk ${action}:`, error);
+      setStatusMessage({
+        type: "error",
+        message: `Failed to perform bulk ${action
+          .toLowerCase()
+          .replace("_", " ")}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      });
+    } finally {
+      setLoadingState((prev) => ({ ...prev, action: false }));
+
+      // Clear status message after 3 seconds
+      setTimeout(() => {
+        setStatusMessage({ type: null, message: "" });
+      }, 3000);
     }
-  }, [selectedUsers, supabase, showToast, logAuditEvent])
-  
-  const bulkRevoke = useCallback(async () => {
-    if (selectedUsers.size === 0) {
-      showToast('No users selected', 'info')
-      return
-    }
-    
-    if (!confirm(`Revoke access for ${selectedUsers.size} selected users?`)) {
-      return
-    }
-    
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ revoked: true })
-        .in('discord_id', Array.from(selectedUsers))
-      
-      if (error) throw error
-      
-      showToast(`${selectedUsers.size} users revoked`, 'success')
-      logAuditEvent('bulk_revoke', `Bulk Revoke action performed for ${selectedUsers.size} users`)
-      
-      // Clear selection
-      setSelectedUsers(new Set())
-      
-    } catch (error) {
-      console.error('Bulk revoke error:', error)
-      showToast('Failed to revoke users', 'error')
-    }
-  }, [selectedUsers, supabase, showToast, logAuditEvent])
-  
-  const bulkAddTrial = useCallback(async () => {
-    if (selectedUsers.size === 0) {
-      showToast('No users selected', 'info')
-      return
-    }
-    
-    if (!confirm(`Add 7-day trial to ${selectedUsers.size} selected users?`)) {
-      return
-    }
-    
-    const trialExpiration = new Date()
-    trialExpiration.setDate(trialExpiration.getDate() + 7)
-    
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          hub_trial: true,
-          trial_expiration: trialExpiration.toISOString()
-        })
-        .in('discord_id', Array.from(selectedUsers))
-      
-      if (error) throw error
-      
-      showToast(`7-day trial added for ${selectedUsers.size} users`, 'success')
-      logAuditEvent('trial', `Bulk trial assignment for ${selectedUsers.size} users`)
-      
-      // Clear selection
-      setSelectedUsers(new Set())
-      
-    } catch (error) {
-      console.error('Bulk trial error:', error)
-      showToast('Failed to add trials', 'error')
-    }
-  }, [selectedUsers, supabase, showToast, logAuditEvent])
-  
-  const bulkDelete = useCallback(async () => {
-    if (selectedUsers.size === 0) {
-      showToast('No users selected', 'info')
-      return
-    }
-    
-    if (!confirm(`DELETE ${selectedUsers.size} selected users? This action cannot be undone!`)) {
-      return
-    }
-    
-    try {
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .in('discord_id', Array.from(selectedUsers))
-      
-      if (error) throw error
-      
-      showToast(`${selectedUsers.size} users deleted`, 'success')
-      logAuditEvent('bulk_delete', `Bulk Delete action performed for ${selectedUsers.size} users`)
-      
-      // Clear selection
-      setSelectedUsers(new Set())
-      
-    } catch (error) {
-      console.error('Bulk delete error:', error)
-      showToast('Failed to delete users', 'error')
-    }
-  }, [selectedUsers, supabase, showToast, logAuditEvent])
-  
+  };
+
   // Selection management
-  const toggleUserSelection = useCallback((discordId: string) => {
-    setSelectedUsers(prev => {
-      const newSet = new Set(prev)
+  const toggleUserSelection = (discordId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+
+    setSelectedUsers((prev) => {
+      const newSet = new Set(prev);
       if (newSet.has(discordId)) {
-        newSet.delete(discordId)
+        newSet.delete(discordId);
       } else {
-        newSet.add(discordId)
+        newSet.add(discordId);
       }
-      return newSet
-    })
-  }, [])
-  
-  const toggleSelectAll = useCallback(() => {
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
     if (selectedUsers.size === filteredUsers.length) {
-      setSelectedUsers(new Set())
+      setSelectedUsers(new Set());
     } else {
-      setSelectedUsers(new Set(filteredUsers.map(user => user.discord_id)))
+      setSelectedUsers(new Set(filteredUsers.map((user) => user.discord_id)));
     }
-  }, [selectedUsers, filteredUsers])
-  
-  // Side panel management
-  const openUserPanel = useCallback(async (discordId: string) => {
-    const user = users.find(u => u.discord_id === discordId)
-    if (!user) return
-    
-    setSelectedUser(user)
-    setSidePanelOpen(true)
-    
-    // Load user blueprints
-    await loadUserBlueprints(discordId)
-    
-  }, [users, loadUserBlueprints])
-  
-  // Format date
-  const formatDate = useCallback((dateString?: string | null) => {
-    if (!dateString) return 'Never'
-    
-    const date = new Date(dateString)
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }, [])
-  
-  // Format relative time
-  const formatRelativeTime = useCallback((dateString?: string | null) => {
-    if (!dateString) return 'Never'
-    
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMins / 60)
-    const diffDays = Math.floor(diffHours / 24)
-    
-    if (diffMins < 1) return 'Just now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays < 7) return `${diffDays}d ago`
-    
-    return formatDate(dateString)
-  }, [formatDate])
-  
+  };
+
+  // Open user detail panel
+  const openUserDetail = async (user: User) => {
+    setSelectedUser(user);
+    setUserDetailOpen(true);
+    await loadUserBlueprints(user.discord_id);
+  };
+
   // Get trial status
-  const getTrialStatus = useCallback((user: User) => {
-    if (!user.hub_trial) return 'N/A'
-    
+  const getTrialStatus = (user: User) => {
+    if (!user.hub_trial) return null;
+
     if (!user.trial_expiration) {
-      return 'TRIAL'
+      return { text: "TRIAL", color: "text-amber-400" };
     }
-    
-    const expiration = new Date(user.trial_expiration)
-    const now = new Date()
-    
+
+    const expiration = new Date(user.trial_expiration);
+    const now = new Date();
+
     if (expiration > now) {
-      const daysLeft = Math.ceil((expiration.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-      return `TRIAL (${daysLeft}d)`
+      const daysLeft = Math.ceil(
+        (expiration.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      return { text: `TRIAL (${daysLeft}d)`, color: "text-amber-400" };
     } else {
-      return 'EXPIRED'
+      return { text: "EXPIRED", color: "text-red-400" };
     }
-  }, [])
-  
-  // Get status badge class - FIXED: Updated for audit logs to match action types
-  const getStatusBadgeClass = useCallback((status: string) => {
-    const statusLower = status.toLowerCase()
-    
-    // Handle audit log action types
-    if (statusLower.includes('whitelist') || statusLower.includes('access')) {
-      return 'bg-green-500/20 text-green-400 border border-green-500/30'
+  };
+
+  // Format relative time for display
+  const getRelativeTime = (dateString: string | null) => {
+    if (!dateString) return "Never";
+
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+
+    if (diffHours < 24) {
+      return `${Math.floor(diffHours)}h ago`;
     }
-    if (statusLower.includes('revoke') || statusLower.includes('revoked')) {
-      return 'bg-red-500/20 text-red-400 border border-red-500/30'
+
+    const diffDays = diffHours / 24;
+    if (diffDays < 7) {
+      return `${Math.floor(diffDays)}d ago`;
     }
-    if (statusLower.includes('trial')) {
-      return 'bg-yellow-400/20 text-yellow-300 border border-yellow-400/30'
-    }
-    if (statusLower.includes('delete')) {
-      return 'bg-red-600/20 text-red-300 border border-red-600/30'
-    }
-    
-    // Handle other status types
-    switch (statusLower) {
-      case 'whitelisted':
-        return 'bg-green-500/20 text-green-400 border border-green-500/30'
-      case 'revoked':
-        return 'bg-red-500/20 text-red-400 border border-red-500/30'
-      case 'online':
-        return 'bg-green-500/20 text-green-400 border border-green-500/30'
-      case 'offline':
-        return 'bg-gray-500/20 text-gray-400 border border-gray-500/20'
-      default:
-        return 'bg-gray-500/20 text-gray-400 border border-gray-500/20'
-    }
-  }, [])
-  
-  // Analytics functions
-  const updateStatistics = useCallback((data: PageAnalytics[], users: UserPageData) => {
-    // Stats are calculated in the component render
-  }, [])
-  
-  const renderTopPages = useCallback((data: PageAnalytics[]) => {
-    // Group by page path and sum time spent
-    const totals: Record<string, { time: number, sessions: number }> = {}
-    
-    data.forEach(row => {
-      if (!totals[row.page_path]) {
-        totals[row.page_path] = { time: 0, sessions: 0 }
-      }
-      totals[row.page_path].time += row.time_spent_seconds
-      totals[row.page_path].sessions++
-    })
-    
-    // Sort by time spent
-    const sorted = Object.entries(totals)
-      .sort(([, a], [, b]) => b.time - a.time)
-      .slice(0, pagesLimit)
-    
-    return sorted
-  }, [pagesLimit])
-  
-  const renderUserTable = useCallback((username: string) => {
-    if (!username || !userData[username]) return null
-    
-    // Calculate user statistics
-    const userPages = userData[username]
-    const entries = Object.entries(userPages)
-    
-    // Filter and sort data
-    const filteredEntries = entries
-      .map(([page, sessions]) => ({
-        page,
-        sessions: sessions.length,
-        totalTime: sessions.reduce((sum, time) => sum + time, 0),
-        avgTime: sessions.reduce((sum, time) => sum + time, 0) / sessions.length
-      }))
-      .filter(entry => (entry.totalTime / 60) >= minTime)
-    
-    // Sort data
-    filteredEntries.sort((a, b) => {
-      switch (sortByAnalytics) {
-        case 'sessions': return b.sessions - a.sessions
-        case 'page': return a.page.localeCompare(b.page)
-        case 'time':
-        default: return b.totalTime - a.totalTime
-      }
-    })
-    
-    return filteredEntries
-  }, [userData, minTime, sortByAnalytics])
-  
-  // Filter audit logs
-  const getFilteredAuditLogs = useCallback(() => {
-    return auditLogs.filter(log => 
-      (!filterAdmin || (log.admin_name?.toLowerCase() || '').includes(filterAdmin.toLowerCase())) &&
-      (!filterAction || (log.action?.toLowerCase() || '').includes(filterAction.toLowerCase())) &&
-      (!filterDesc || (log.description?.toLowerCase() || '').includes(filterDesc.toLowerCase())) &&
-      (!filterTarget || (log.target_discord_id?.toLowerCase() || '').includes(filterTarget.toLowerCase()))
-    )
-  }, [auditLogs, filterAdmin, filterAction, filterDesc, filterTarget])
-  
-  // Update filters and sort
-  useEffect(() => {
-    applyFiltersAndSort()
-  }, [searchTerm, filterStatus, filterActivity, filterType, filterDateRange, sortBy])
-  
-  // Update audit logs when filters change
-  useEffect(() => {
-    loadAuditLogs()
-  }, [logsPage, logsLimit, loadAuditLogs])
-  
-  // Calculate statistics
-  const stats = {
-    totalUsers: users.length,
-    whitelistedUsers: users.filter(u => !u.revoked).length,
-    revokedUsers: users.filter(u => u.revoked).length,
-    trialUsers: users.filter(u => 
-      u.hub_trial && u.trial_expiration && new Date(u.trial_expiration) > new Date()
-    ).length,
-    onlineUsers: onlineUsers.size,
-    totalLogins: users.reduce((sum, u) => sum + (u.login_count || 0), 0),
-    activeUsers: users.filter(u => {
-      if (!u.last_login) return false
-      const lastLogin = new Date(u.last_login)
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-      return lastLogin > oneDayAgo
-    }).length
-  }
-  
+
+    return formatDate(dateString);
+  };
+
   // Analytics statistics
-  const analyticsStats = {
-    totalUsers: Object.keys(userData).length,
-    totalSessions: pageData.length,
-    avgSessionTime: pageData.length > 0 
-      ? pageData.reduce((sum, row) => sum + row.time_spent_seconds, 0) / pageData.length 
-      : 0,
-    uniquePages: new Set(pageData.map(row => row.page_path)).size
-  }
-  
+  const analyticsStats = useMemo(() => {
+    return {
+      totalUsers: Object.keys(
+        topUsers.reduce((acc, user) => {
+          acc[user.username] = true;
+          return acc;
+        }, {} as Record<string, boolean>)
+      ).length,
+      totalSessions: pageAnalytics.reduce(
+        (sum, page) => sum + page.sessions,
+        0
+      ),
+      avgSessionTime:
+        pageAnalytics.length > 0
+          ? pageAnalytics.reduce((sum, page) => sum + page.total_time, 0) /
+            pageAnalytics.reduce((sum, page) => sum + page.sessions, 0)
+          : 0,
+      uniquePages: pageAnalytics.length,
+    };
+  }, [pageAnalytics, topUsers]);
+
   // User analytics statistics
-  const getUserAnalyticsStats = (username: string) => {
-    if (!username || !userData[username]) return { totalTime: 0, totalSessions: 0, uniquePages: 0 }
-    
-    const userPages = userData[username]
-    const entries = Object.entries(userPages)
-    const totalSessions = entries.reduce((sum, [, sessions]) => sum + sessions.length, 0)
-    const totalTime = entries.reduce((sum, [, sessions]) => sum + sessions.reduce((s, t) => s + t, 0), 0)
-    const uniquePages = entries.length
-    
-    return { totalTime, totalSessions, uniquePages }
-  }
-  
+  const getUserAnalyticsStats = useMemo(() => {
+    if (!selectedAnalyticsUser) {
+      return { totalTime: 0, totalSessions: 0, uniquePages: 0 };
+    }
+
+    return {
+      totalTime: userPageAnalytics.reduce(
+        (sum, page) => sum + page.total_time,
+        0
+      ),
+      totalSessions: userPageAnalytics.reduce(
+        (sum, page) => sum + page.sessions,
+        0
+      ),
+      uniquePages: userPageAnalytics.length,
+    };
+  }, [selectedAnalyticsUser, userPageAnalytics]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#121212]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#00c6ff]"></div>
+        <LoadingSpinner size="lg" />
       </div>
-    )
+    );
   }
-  
+
   if (!user || !isAdmin()) {
-    return null
+    return null;
   }
-  
+
   return (
-    <div className="min-h-screen bg-[#121212] text-[#f0f0f0] p-4 md:p-8">
-      {/* FIXED: Made container wider on desktop by changing from max-w-7xl to max-w-[1600px] */}
-      <div className="max-w-[1600px] mx-auto bg-[rgba(30,30,30,0.9)] rounded-xl p-4 md:p-8 border border-white/5 shadow-2xl backdrop-blur-xl relative">
-        <Link href="/" className="inline-flex items-center text-[#00c6ff] border border-[#00c6ff] rounded-md px-4 py-2 text-sm font-semibold hover:bg-[#00c6ff]/10 transition-colors mb-4">
-          ← Back
-        </Link>
-        
-        <h1 className="text-3xl md:text-4xl font-bold text-[#00c6ff] text-center mb-6">Admin Dashboard</h1>
-        
+    <div className="min-h-screen bg-[#121212] text-white p-4 md:p-6">
+      <div className="max-w-[1600px] mx-auto">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-[#00c6ff] to-[#0072ff] inline-block text-transparent bg-clip-text">
+              Admin Dashboard
+            </h1>
+            <p className="text-white/60 mt-1">
+              Manage users, view logs, and analyze usage
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Link href="/">
+              <Button variant="secondary" size="default">
+                ← Back to Home
+              </Button>
+            </Link>
+
+            <Button
+              variant="default"
+              onClick={() => {
+                loadUsers(userPage, userLimit, userSearch, userStatusFilter);
+                loadLogs(logPage, logLimit, logFilters);
+                loadAnalytics();
+              }}
+              disabled={loadingState.refreshing}
+            >
+              {loadingState.refreshing ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  Refreshing...
+                </>
+              ) : (
+                "Refresh Data"
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Status Message */}
+        {statusMessage.type && (
+          <div
+            className={`mb-6 p-4 rounded-lg ${
+              statusMessage.type === "success"
+                ? "bg-green-500/10 border border-green-500/30 text-green-400"
+                : statusMessage.type === "error"
+                ? "bg-red-500/10 border border-red-500/30 text-red-400"
+                : statusMessage.type === "warning"
+                ? "bg-yellow-500/10 border border-yellow-500/30 text-yellow-400"
+                : "bg-blue-500/10 border border-blue-500/30 text-blue-400"
+            }`}
+          >
+            {statusMessage.message}
+          </div>
+        )}
+
         {/* Tabs */}
-        <div className="mb-8 flex justify-center">
-          <TabsList>
-            <TabsTrigger 
-              value="users" 
-              onClick={setActiveTab} 
-              active={activeTab === 'users'}
+        <div className="mb-6 border-b border-white/10">
+          <div className="flex space-x-6">
+            <button
+              className={`pb-3 px-1 font-medium ${
+                activeTab === "users"
+                  ? "text-[#00c6ff] border-b-2 border-[#00c6ff]"
+                  : "text-white/60 hover:text-white/80"
+              }`}
+              onClick={() => setActiveTab("users")}
             >
               User Management
-            </TabsTrigger>
-            <TabsTrigger 
-              value="analytics" 
-              onClick={setActiveTab} 
-              active={activeTab === 'analytics'}
+            </button>
+            <button
+              className={`pb-3 px-1 font-medium ${
+                activeTab === "analytics"
+                  ? "text-[#00c6ff] border-b-2 border-[#00c6ff]"
+                  : "text-white/60 hover:text-white/80"
+              }`}
+              onClick={() => setActiveTab("analytics")}
             >
               Analytics
-            </TabsTrigger>
-          </TabsList>
+            </button>
+            <button
+              className={`pb-3 px-1 font-medium ${
+                activeTab === "logs"
+                  ? "text-[#00c6ff] border-b-2 border-[#00c6ff]"
+                  : "text-white/60 hover:text-white/80"
+              }`}
+              onClick={() => setActiveTab("logs")}
+            >
+              Audit Logs
+            </button>
+          </div>
         </div>
-        
-        {/* User Management Tab */}
-        <TabsContent value="users" activeValue={activeTab}>
+
+        {/* Users Tab */}
+        {activeTab === "users" && (
           <div className="space-y-6">
-            {/* Add User Form */}
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
-              <input 
-                type="text" 
-                id="newDiscordId" 
-                placeholder="Enter Discord ID"
-                className="flex-1 p-3 bg-white/5 border border-white/20 rounded-lg text-white"
-              />
-              <input 
-                type="text" 
-                id="newUsername" 
-                placeholder="Enter Username"
-                className="flex-1 p-3 bg-white/5 border border-white/20 rounded-lg text-white"
-              />
-              <button 
-                onClick={() => {
-                  const discordId = (document.getElementById('newDiscordId') as HTMLInputElement).value
-                  const username = (document.getElementById('newUsername') as HTMLInputElement).value
-                  addUser(discordId, username)
-                }}
-                className="bg-[#00c6ff] text-black font-bold py-3 px-6 rounded-lg hover:bg-[#00a9db] transition-colors"
-              >
-                Whitelist User
-              </button>
-            </div>
-            
-            {/* FIXED: Removed Analytics Dashboard button */}
-            <div className="flex flex-wrap gap-4 mb-6">
-              <button 
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className="text-[#00c6ff] border border-[#00c6ff] px-4 py-2 rounded-lg hover:bg-[#00c6ff]/10 transition-colors"
-              >
-                {showAdvancedFilters ? 'Hide Advanced Filters' : 'Show Advanced Filters'}
-              </button>
-            </div>
-            
-            {/* Advanced Filters */}
-            {showAdvancedFilters && (
-              <div className="bg-white/2 border border-white/5 rounded-xl p-4 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="flex flex-col gap-2">
-                    <label className="text-white/70">Status</label>
-                    <select 
-                      value={filterStatus}
-                      onChange={(e) => setFilterStatus(e.target.value)}
-                      className="p-2 bg-[#2a2a2a] text-white border border-white/20 rounded-lg"
-                    >
-                      <option value="all">All Users</option>
-                      <option value="whitelisted">Whitelisted</option>
-                      <option value="revoked">Revoked</option>
-                      <option value="trial">On Trial</option>
-                    </select>
-                  </div>
-                  
-                  <div className="flex flex-col gap-2">
-                    <label className="text-white/70">Login Activity</label>
-                    <select 
-                      value={filterActivity}
-                      onChange={(e) => setFilterActivity(e.target.value)}
-                      className="p-2 bg-[#2a2a2a] text-white border border-white/20 rounded-lg"
-                    >
-                      <option value="all">All Activity</option>
-                      <option value="active_24h">Active 24h</option>
-                      <option value="active_7d">Active 7d</option>
-                      <option value="active_30d">Active 30d</option>
-                      <option value="never_logged">Never Logged In</option>
-                    </select>
-                  </div>
-                  
-                  <div className="flex flex-col gap-2">
-                    <label className="text-white/70">Account Type</label>
-                    <select 
-                      value={filterType}
-                      onChange={(e) => setFilterType(e.target.value)}
-                      className="p-2 bg-[#2a2a2a] text-white border border-white/20 rounded-lg"
-                    >
-                      <option value="all">All Types</option>
-                      <option value="admin">Admins</option>
-                      <option value="regular">Regular Users</option>
-                      <option value="trial">Trial Users</option>
-                    </select>
-                  </div>
-                  
-                  <div className="flex flex-col gap-2">
-                    <label className="text-white/70">Date Range</label>
-                    <select 
-                      value={filterDateRange}
-                      onChange={(e) => setFilterDateRange(e.target.value)}
-                      className="p-2 bg-[#2a2a2a] text-white border border-white/20 rounded-lg"
-                    >
-                      <option value="all">All Time</option>
-                      <option value="today">Today</option>
-                      <option value="week">This Week</option>
-                      <option value="month">This Month</option>
-                      <option value="quarter">This Quarter</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Search and Sort */}
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
-              <input 
-                type="text" 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search Discord ID, Username, or Email"
-                className="flex-1 p-3 bg-white/5 border border-white/20 rounded-lg text-white"
-              />
-              
-              <select 
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="p-3 bg-[#2a2a2a] text-white border border-white/20 rounded-lg"
-              >
-                <option value="last_login">Sort: Last Login</option>
-                <option value="login_count">Sort: Login Count</option>
-                <option value="username">Sort: Username</option>
-                <option value="created_at">Sort: Date Added</option>
-                <option value="trial_expiration">Sort: Trial Expiration</option>
-              </select>
-              
-              {/* FIXED: Refresh button loading state */}
-              <button 
-                onClick={loadUsers}
-                disabled={isLoading}
-                className="bg-[#2a2a2a] text-white border border-white/20 px-6 py-3 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <span className="flex items-center">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white/90 rounded-full animate-spin mr-2"></span>
-                    Loading...
+            {/* Search and Filters */}
+            <div className="bg-[#1a1a1a] rounded-xl p-6 border border-white/10">
+              <div className="flex flex-col md:flex-row gap-4 mb-4">
+                <div className="relative flex-grow">
+                  <input
+                    type="text"
+                    value={userSearch}
+                    onChange={(e) => handleUserSearch(e.target.value)}
+                    placeholder="Search by username or Discord ID"
+                    className="w-full pl-10 pr-4 py-2.5 bg-[#2a2a2a] border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-[#00c6ff] focus:ring-1 focus:ring-[#00c6ff]/30"
+                  />
+                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/40">
+                    🔍
                   </span>
-                ) : 'Refresh'}
-              </button>
+                </div>
+
+                <select
+                  value={userStatusFilter}
+                  onChange={(e) => {
+                    setUserStatusFilter(e.target.value as any);
+                    setUserPage(0);
+                    loadUsers(0, userLimit, userSearch, e.target.value as any);
+                  }}
+                  className="px-4 py-2.5 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#00c6ff] focus:ring-1 focus:ring-[#00c6ff]/30"
+                >
+                  <option value="all">All Users</option>
+                  <option value="whitelisted">Whitelisted</option>
+                  <option value="revoked">Revoked</option>
+                  <option value="trial">Trial</option>
+                </select>
+
+                <select
+                  value={userLimit}
+                  onChange={(e) => {
+                    const newLimit = parseInt(e.target.value);
+                    setUserLimit(newLimit);
+                    setUserPage(0);
+                    loadUsers(0, newLimit, userSearch, userStatusFilter);
+                  }}
+                  className="px-4 py-2.5 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#00c6ff] focus:ring-1 focus:ring-[#00c6ff]/30"
+                >
+                  <option value="15">15 per page</option>
+                  <option value="25">25 per page</option>
+                  <option value="50">50 per page</option>
+                </select>
+
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="px-4 py-2.5 bg-[#2a2a2a] border border-white/10 rounded-lg text-white hover:bg-[#3a3a3a] transition-colors"
+                >
+                  {showFilters ? "Hide Filters" : "Show Filters"}
+                </button>
+              </div>
+
+              {/* Advanced Filters */}
+              {showFilters && (
+                <div className="p-4 bg-[#2a2a2a] rounded-lg mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-white/60 text-sm mb-2">
+                      Add New User
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Discord ID"
+                        className="flex-1 px-3 py-2 bg-[#3a3a3a] border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-[#00c6ff]"
+                      />
+                      <button className="px-3 py-2 bg-[#00c6ff] text-black font-medium rounded-lg hover:bg-[#00b8ee] transition-colors">
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-white/60 text-sm mb-2">
+                      Bulk Actions
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => performBulkAction("WHITELIST")}
+                        disabled={selectedUsers.size === 0}
+                        className="px-3 py-2 bg-green-600/80 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Whitelist
+                      </button>
+                      <button
+                        onClick={() => performBulkAction("REVOKE")}
+                        disabled={selectedUsers.size === 0}
+                        className="px-3 py-2 bg-red-600/80 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Revoke
+                      </button>
+                      <button
+                        onClick={() => performBulkAction("TRIAL_7")}
+                        disabled={selectedUsers.size === 0}
+                        className="px-3 py-2 bg-amber-500/80 text-white rounded-lg hover:bg-amber-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        7d Trial
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-white/60 text-sm mb-2">
+                      Selection
+                    </label>
+                    <div className="flex justify-between items-center">
+                      <span className="text-white/80">
+                        {selectedUsers.size} users selected
+                      </span>
+                      <button
+                        onClick={() => setSelectedUsers(new Set())}
+                        disabled={selectedUsers.size === 0}
+                        className="px-3 py-2 bg-[#3a3a3a] text-white rounded-lg hover:bg-[#4a4a4a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            
-            {/* Bulk Actions */}
-            {selectedUsers.size > 0 && (
-              <div className="bg-white/2 border border-white/5 rounded-xl p-4 mb-6">
-                <h3 className="text-[#00c6ff] text-lg font-semibold mb-4">
-                  Bulk Actions ({selectedUsers.size} selected)
-                </h3>
-                <div className="flex flex-wrap gap-3">
-                  <button 
-                    onClick={bulkWhitelist}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                  >
-                    Whitelist Selected
-                  </button>
-                  <button 
-                    onClick={bulkRevoke}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                  >
-                    Revoke Selected
-                  </button>
-                  <button 
-                    onClick={bulkAddTrial}
-                    className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
-                  >
-                    Add 7 Day Trial
-                  </button>
-                  <button 
-                    onClick={bulkDelete}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                  >
-                    Delete Selected
-                  </button>
-                </div>
-              </div>
-            )}
-            
-            {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
-              <div className="bg-white/4 border border-white/5 rounded-xl p-4 flex items-center gap-4">
-                <div className="text-2xl text-[#00c6ff]">👥</div>
-                <div>
-                  <h3 className="text-xs uppercase tracking-wider text-[#00c6ff] mb-1">Total Users</h3>
-                  <p className="text-xl font-bold">{stats.totalUsers}</p>
-                </div>
-              </div>
-              
-              <div className="bg-white/4 border border-white/5 rounded-xl p-4 flex items-center gap-4">
-                <div className="text-2xl text-[#00c6ff]">⚡</div>
-                <div>
-                  <h3 className="text-xs uppercase tracking-wider text-[#00c6ff] mb-1">Online Now</h3>
-                  <p className="text-xl font-bold">{stats.onlineUsers}</p>
-                </div>
-              </div>
-              
-              <div className="bg-white/4 border border-white/5 rounded-xl p-4 flex items-center gap-4">
-                <div className="text-2xl text-[#00c6ff]">📈</div>
-                <div>
-                  <h3 className="text-xs uppercase tracking-wider text-[#00c6ff] mb-1">Total Logins</h3>
-                  <p className="text-xl font-bold">{stats.totalLogins}</p>
-                </div>
-              </div>
-              
-              <div className="bg-white/4 border border-white/5 rounded-xl p-4 flex items-center gap-4">
-                <div className="text-2xl text-[#00c6ff]">🔒</div>
-                <div>
-                  <h3 className="text-xs uppercase tracking-wider text-[#00c6ff] mb-1">Revoked Users</h3>
-                  <p className="text-xl font-bold">{stats.revokedUsers}</p>
-                </div>
-              </div>
-              
-              <div className="bg-white/4 border border-white/5 rounded-xl p-4 flex items-center gap-4">
-                <div className="text-2xl text-[#00c6ff]">🎯</div>
-                <div>
-                  <h3 className="text-xs uppercase tracking-wider text-[#00c6ff] mb-1">Trial Users</h3>
-                  <p className="text-xl font-bold">{stats.trialUsers}</p>
-                </div>
-              </div>
-              
-              <div className="bg-white/4 border border-white/5 rounded-xl p-4 flex items-center gap-4">
-                <div className="text-2xl text-[#00c6ff]">⏰</div>
-                <div>
-                  <h3 className="text-xs uppercase tracking-wider text-[#00c6ff] mb-1">Active Last 24h</h3>
-                  <p className="text-xl font-bold">{stats.activeUsers}</p>
-                </div>
-              </div>
-            </div>
-            
+
             {/* Users Table */}
-            <div className="bg-white/1 border border-white/5 rounded-xl overflow-hidden">
+            <div className="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-white/3 sticky top-0 z-10">
+                  <thead className="bg-[#2a2a2a]">
                     <tr>
                       <th className="p-4 text-left">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedUsers.size === filteredUsers.length && filteredUsers.length > 0}
+                        <input
+                          type="checkbox"
+                          checked={
+                            selectedUsers.size === filteredUsers.length &&
+                            filteredUsers.length > 0
+                          }
                           onChange={toggleSelectAll}
                           className="w-4 h-4 rounded bg-white/10 border-white/30 text-[#00c6ff] focus:ring-[#00c6ff]/30"
                         />
                       </th>
-                      <th className="p-4 text-left text-[#00c6ff] font-semibold">Discord ID</th>
-                      <th className="p-4 text-left text-[#00c6ff] font-semibold">Username</th>
-                      <th className="p-4 text-left text-[#00c6ff] font-semibold">Added</th>
-                      <th className="p-4 text-left text-[#00c6ff] font-semibold">Last Login</th>
-                      <th className="p-4 text-left text-[#00c6ff] font-semibold">Login Count</th>
-                      <th className="p-4 text-left text-[#00c6ff] font-semibold">Status</th>
-                      <th className="p-4 text-left text-[#00c6ff] font-semibold">Trial</th>
-                      <th className="p-4 text-left text-[#00c6ff] font-semibold">Session</th>
-                      <th className="p-4 text-left text-[#00c6ff] font-semibold">Actions</th>
+                      <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        User
+                      </th>
+                      <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        Status
+                      </th>
+                      <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        Last Login
+                      </th>
+                      <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        Login Count
+                      </th>
+                      <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        Trial Status
+                      </th>
+                      <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {filteredUsers.map(user => (
-                      <tr 
-                        key={user.discord_id}
-                        className="border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors"
-                        onClick={() => openUserPanel(user.discord_id)}
-                      >
-                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                          <input 
-                            type="checkbox" 
-                            checked={selectedUsers.has(user.discord_id)}
-                            onChange={() => toggleUserSelection(user.discord_id)}
-                            className="w-4 h-4 rounded bg-white/10 border-white/30 text-[#00c6ff] focus:ring-[#00c6ff]/30"
-                          />
+                  <tbody className="divide-y divide-white/5">
+                    {loadingState.users ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center">
+                          <LoadingSpinner size="md" className="mx-auto" />
+                          <p className="mt-2 text-white/60">Loading users...</p>
                         </td>
-                        <td className="p-4">
-                          {user.discord_id}
-                          {adminDiscordIds.includes(user.discord_id) && (
-                            <span className="ml-2 px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-[#ffd700] to-[#ffed4e] text-black rounded-md">
-                              ADMIN
-                            </span>
-                          )}
+                      </tr>
+                    ) : filteredUsers.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="p-8 text-center text-white/60"
+                        >
+                          No users found matching your criteria
                         </td>
-                        <td className="p-4">{user.username || 'N/A'}</td>
-                        <td className="p-4">{formatDate(user.created_at)}</td>
-                        <td className="p-4">{user.last_login ? formatDate(user.last_login) : 'Never'}</td>
-                        <td className="p-4">{user.login_count || 0}</td>
-                        <td className="p-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
-                            user.revoked 
-                              ? getStatusBadgeClass('revoked') 
-                              : getStatusBadgeClass('whitelisted')
-                          }`}>
-                            {user.revoked ? 'REVOKED' : 'ACCESS'}
-                          </span>
-                        </td>
-                        {/* FIXED: Trial badge with no-wrap to prevent stacking */}
-                        <td className="p-4">
-                          {user.hub_trial ? (
-                            user.trial_expiration && new Date(user.trial_expiration) > new Date() ? (
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase whitespace-nowrap ${getStatusBadgeClass('trial')}`}>
-                                {getTrialStatus(user)}
-                              </span>
-                            ) : (
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${getStatusBadgeClass('revoked')}`}>
-                                EXPIRED
-                              </span>
-                            )
-                          ) : 'N/A'}
-                        </td>
-                        <td className="p-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
-                            onlineUsers.has(user.discord_id)
-                              ? getStatusBadgeClass('online')
-                              : getStatusBadgeClass('offline')
-                          }`}>
-                            {onlineUsers.has(user.discord_id) ? 'ONLINE' : 'OFFLINE'}
-                          </span>
-                        </td>
-                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                          <div className="relative inline-block text-left">
-                            <button 
-                              className="text-white hover:bg-white/10 rounded-md p-2"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                const dropdown = e.currentTarget.nextElementSibling
-                                if (dropdown) {
-                                  dropdown.classList.toggle('hidden')
-                                }
-                              }}
-                            >
-                              ☰
-                            </button>
-                            <div className="hidden absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-[#2a2a2a] shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                              <div className="py-1">
-                                <button
-                                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    updateUserStatus(user.discord_id, !user.revoked)
-                                    e.currentTarget.closest('.hidden')?.classList.add('hidden')
-                                  }}
-                                >
-                                  {user.revoked ? 'Whitelist' : 'Revoke'}
-                                </button>
-                                <button
-                                  className="block w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-white/10"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    deleteUser(user.discord_id)
-                                    e.currentTarget.closest('.hidden')?.classList.add('hidden')
-                                  }}
-                                >
-                                  Delete
-                                </button>
+                      </tr>
+                    ) : (
+                      filteredUsers.map((user) => (
+                        <tr
+                          key={user.discord_id}
+                          className="hover:bg-white/5 cursor-pointer transition-colors"
+                          onClick={() => openUserDetail(user)}
+                        >
+                          <td
+                            className="p-4"
+                            onClick={(e) =>
+                              toggleUserSelection(user.discord_id, e)
+                            }
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedUsers.has(user.discord_id)}
+                              onChange={() => {}}
+                              className="w-4 h-4 rounded bg-white/10 border-white/30 text-[#00c6ff] focus:ring-[#00c6ff]/30"
+                            />
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`w-2.5 h-2.5 rounded-full ${
+                                  onlineUsers.has(user.discord_id)
+                                    ? "bg-green-500"
+                                    : "bg-gray-500"
+                                }`}
+                              ></div>
+                              <div>
+                                <div className="font-medium flex items-center gap-2">
+                                  {user.username || "Unknown User"}
+                                  {ADMIN_DISCORD_IDS.includes(
+                                    user.discord_id
+                                  ) && (
+                                    <span className="px-1.5 py-0.5 text-xs font-bold bg-gradient-to-r from-[#ffd700] to-[#ffed4e] text-black rounded">
+                                      ADMIN
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-white/60 font-mono">
+                                  {user.discord_id}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    
-                    {filteredUsers.length === 0 && (
-                      <tr>
-                        <td colSpan={10} className="p-8 text-center text-white/50">
-                          No users found matching your filters
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="p-4">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                                user.revoked === false
+                                  ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                  : "bg-red-500/20 text-red-400 border border-red-500/30"
+                              }`}
+                            >
+                              {user.revoked === false
+                                ? "WHITELISTED"
+                                : "REVOKED"}
+                            </span>
+                          </td>
+                          <td className="p-4 text-white/80">
+                            {formatLastLogin(user.last_login)}
+                          </td>
+                          <td className="p-4 text-white/80">
+                            {user.login_count || 0}
+                          </td>
+                          <td className="p-4">
+                            {user.hub_trial ? (
+                              <span
+                                className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                                  user.trial_expiration &&
+                                  new Date(user.trial_expiration) > new Date()
+                                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                    : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                }`}
+                              >
+                                {getTrialStatus(user)?.text || "TRIAL"}
+                              </span>
+                            ) : (
+                              <span className="text-white/40">N/A</span>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  performUserAction(
+                                    user.revoked === false
+                                      ? "REVOKE"
+                                      : "WHITELIST",
+                                    user.discord_id,
+                                    user.username || "Unknown"
+                                  );
+                                }}
+                                className={`px-3 py-1 rounded text-xs font-medium ${
+                                  user.revoked === false
+                                    ? "bg-red-600/80 text-white hover:bg-red-600"
+                                    : "bg-green-600/80 text-white hover:bg-green-600"
+                                } transition-colors`}
+                              >
+                                {user.revoked === false
+                                  ? "Revoke"
+                                  : "Whitelist"}
+                              </button>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  performUserAction(
+                                    "TRIAL_7",
+                                    user.discord_id,
+                                    user.username || "Unknown"
+                                  );
+                                }}
+                                className="px-3 py-1 bg-amber-500/80 text-white rounded text-xs font-medium hover:bg-amber-500 transition-colors"
+                              >
+                                7d Trial
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination */}
+              <div className="flex justify-between items-center p-4 border-t border-white/10">
+                <div className="text-sm text-white/60">
+                  Showing {userPage * userLimit + 1}-
+                  {Math.min((userPage + 1) * userLimit, userCount)} of{" "}
+                  {userCount} users
+                </div>
+
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => {
+                      const newPage = Math.max(0, userPage - 1);
+                      setUserPage(newPage);
+                      loadUsers(
+                        newPage,
+                        userLimit,
+                        userSearch,
+                        userStatusFilter
+                      );
+                    }}
+                    disabled={userPage === 0}
+                    className="px-3 py-1.5 bg-[#2a2a2a] text-white rounded hover:bg-[#3a3a3a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const newPage = userPage + 1;
+                      setUserPage(newPage);
+                      loadUsers(
+                        newPage,
+                        userLimit,
+                        userSearch,
+                        userStatusFilter
+                      );
+                    }}
+                    disabled={(userPage + 1) * userLimit >= userCount}
+                    className="px-3 py-1.5 bg-[#2a2a2a] text-white rounded hover:bg-[#3a3a3a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        </TabsContent>
-        
+        )}
+
         {/* Analytics Tab */}
-        <TabsContent value="analytics" activeValue={activeTab}>
-          <div className="space-y-8">
+        {activeTab === "analytics" && (
+          <div className="space-y-6">
             {/* Stats Overview */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 text-center">
-                <div className="text-2xl font-bold text-[#00c6ff] mb-1">{analyticsStats.totalUsers}</div>
-                <div className="text-xs text-white/70 uppercase tracking-wider">Active Users</div>
+              <div className="bg-[#1a1a1a] rounded-xl p-6 border border-white/10">
+                <div className="text-2xl font-bold text-[#00c6ff] mb-1">
+                  {analyticsStats.totalUsers}
+                </div>
+                <div className="text-sm text-white/60">Active Users</div>
               </div>
-              
-              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 text-center">
-                <div className="text-2xl font-bold text-[#00c6ff] mb-1">{analyticsStats.totalSessions}</div>
-                <div className="text-xs text-white/70 uppercase tracking-wider">Total Sessions</div>
+
+              <div className="bg-[#1a1a1a] rounded-xl p-6 border border-white/10">
+                <div className="text-2xl font-bold text-[#00c6ff] mb-1">
+                  {analyticsStats.totalSessions}
+                </div>
+                <div className="text-sm text-white/60">Total Sessions</div>
               </div>
-              
-              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 text-center">
+
+              <div className="bg-[#1a1a1a] rounded-xl p-6 border border-white/10">
                 <div className="text-2xl font-bold text-[#00c6ff] mb-1">
                   {(analyticsStats.avgSessionTime / 60).toFixed(1)}m
                 </div>
-                <div className="text-xs text-white/70 uppercase tracking-wider">Avg Session Time</div>
+                <div className="text-sm text-white/60">Avg Session Time</div>
               </div>
-              
-              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 text-center">
-                <div className="text-2xl font-bold text-[#00c6ff] mb-1">{analyticsStats.uniquePages}</div>
-                <div className="text-xs text-white/70 uppercase tracking-wider">Unique Pages</div>
+
+              <div className="bg-[#1a1a1a] rounded-xl p-6 border border-white/10">
+                <div className="text-2xl font-bold text-[#00c6ff] mb-1">
+                  {analyticsStats.uniquePages}
+                </div>
+                <div className="text-sm text-white/60">Unique Pages</div>
               </div>
             </div>
-            
+
             {/* Top Pages and User Analytics */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Top Pages */}
-              <div className="bg-white/[0.05] border border-white/[0.1] rounded-xl overflow-hidden">
+              <div className="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden">
                 <div className="bg-[#00c6ff]/10 border-b border-[#00c6ff]/20 p-4">
-                  <h2 className="text-xl font-semibold text-[#00c6ff]">Top Pages by Time Spent</h2>
+                  <h2 className="text-xl font-semibold text-[#00c6ff]">
+                    Top Pages by Time Spent
+                  </h2>
                 </div>
-                
-                <div className="p-4">
-                  <div className="flex items-center gap-4 mb-4">
-                    <select
-                      value={pagesLimit}
-                      onChange={(e) => setPagesLimit(Number(e.target.value))}
-                      className="bg-[#1c1c1c] border border-white/20 text-white p-2 rounded-lg"
-                    >
-                      <option value={10}>Top 10</option>
-                      <option value={15}>Top 15</option>
-                      <option value={25}>Top 25</option>
-                    </select>
-                  </div>
-                  
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-white/[0.03] border-b border-white/10">
-                          <th className="p-3 text-left text-[#00c6ff] font-semibold">Rank</th>
-                          <th className="p-3 text-left text-[#00c6ff] font-semibold">Page</th>
-                          <th className="p-3 text-left text-[#00c6ff] font-semibold">Total Time</th>
-                          <th className="p-3 text-left text-[#00c6ff] font-semibold">Sessions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {renderTopPages(pageData).map(([page, data], index) => (
-                          <tr key={page} className="border-b border-white/5 hover:bg-white/[0.03]">
-                            <td className="p-3 font-semibold">#{index + 1}</td>
-                            <td className="p-3">
-                              <span className="bg-white/5 px-2 py-1 rounded text-sm font-mono">
-                                {page}
-                              </span>
-                            </td>
-                            <td className="p-3 font-semibold">{(data.time / 60).toFixed(1)} min</td>
-                            <td className="p-3">{data.sessions} sessions</td>
-                          </tr>
-                        ))}
-                        
-                        {renderTopPages(pageData).length === 0 && (
-                          <tr>
-                            <td colSpan={4} className="p-6 text-center text-white/50">
-                              No page data available
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-              
-              {/* User Page Analytics */}
-              <div className="bg-white/[0.05] border border-white/[0.1] rounded-xl overflow-hidden">
-                <div className="bg-[#00c6ff]/10 border-b border-[#00c6ff]/20 p-4">
-                  <h2 className="text-xl font-semibold text-[#00c6ff]">User Page Analytics</h2>
-                </div>
-                
-                <div className="p-4">
-                  <div className="flex flex-col md:flex-row gap-4 mb-4">
-                    <select
-                      value={selectedAnalyticsUser}
-                      onChange={(e) => setSelectedAnalyticsUser(e.target.value)}
-                      className="flex-1 bg-[#1c1c1c] border border-white/20 text-white p-2 rounded-lg"
-                    >
-                      <option value="">Select a user...</option>
-                      {Object.keys(userData).sort().map(username => (
-                        <option key={username} value={username}>{username}</option>
-                      ))}
-                    </select>
-                    
-                    <div className="flex items-center gap-2">
-                      <label className="text-white/70">Min time:</label>
-                      <input
-                        type="number"
-                        value={minTime}
-                        onChange={(e) => setMinTime(Number(e.target.value))}
-                        min={0}
-                        className="w-20 bg-[#1c1c1c] border border-white/20 text-white p-2 rounded-lg"
-                      />
-                      <span className="text-white/70">minutes</span>
-                    </div>
-                    
-                    <select
-                      value={sortByAnalytics}
-                      onChange={(e) => setSortByAnalytics(e.target.value)}
-                      className="bg-[#1c1c1c] border border-white/20 text-white p-2 rounded-lg"
-                    >
-                      <option value="time">Sort by Time</option>
-                      <option value="sessions">Sort by Sessions</option>
-                      <option value="page">Sort by Page</option>
-                    </select>
-                  </div>
-                  
-                  {selectedAnalyticsUser && (
-                    <div className="mb-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="bg-white/[0.03] border border-white/[0.08] rounded-lg p-3 text-center">
-                          <div className="text-xl font-bold text-[#00c6ff] mb-1">
-                            {(getUserAnalyticsStats(selectedAnalyticsUser).totalTime / 60).toFixed(1)}m
-                          </div>
-                          <div className="text-xs text-white/70">Total Time</div>
-                        </div>
-                        
-                        <div className="bg-white/[0.03] border border-white/[0.08] rounded-lg p-3 text-center">
-                          <div className="text-xl font-bold text-[#00c6ff] mb-1">
-                            {getUserAnalyticsStats(selectedAnalyticsUser).totalSessions}
-                          </div>
-                          <div className="text-xs text-white/70">Total Sessions</div>
-                        </div>
-                        
-                        <div className="bg-white/[0.03] border border-white/[0.08] rounded-lg p-3 text-center">
-                          <div className="text-xl font-bold text-[#00c6ff] mb-1">
-                            {getUserAnalyticsStats(selectedAnalyticsUser).uniquePages}
-                          </div>
-                          <div className="text-xs text-white/70">Unique Pages</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-white/[0.03] border-b border-white/10">
-                          <th className="p-3 text-left text-[#00c6ff] font-semibold">Page</th>
-                          <th className="p-3 text-left text-[#00c6ff] font-semibold">Sessions</th>
-                          <th className="p-3 text-left text-[#00c6ff] font-semibold">Total Time</th>
-                          <th className="p-3 text-left text-[#00c6ff] font-semibold">Avg Time</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedAnalyticsUser && renderUserTable(selectedAnalyticsUser)?.map(entry => (
-                          <tr key={entry.page} className="border-b border-white/5 hover:bg-white/[0.03]">
-                            <td className="p-3">
-                              <span className="bg-white/5 px-2 py-1 rounded text-sm font-mono">
-                                {entry.page}
-                              </span>
-                            </td>
-                            <td className="p-3">{entry.sessions}</td>
-                            <td className="p-3 font-semibold">{(entry.totalTime / 60).toFixed(1)} min</td>
-                            <td className="p-3">{(entry.avgTime / 60).toFixed(1)} min</td>
-                          </tr>
-                        ))}
-                        
-                        {!selectedAnalyticsUser && (
-                          <tr>
-                            <td colSpan={4} className="p-6 text-center text-white/50">
-                              Select a user to view their page analytics
-                            </td>
-                          </tr>
-                        )}
-                        
-                        {selectedAnalyticsUser && renderUserTable(selectedAnalyticsUser)?.length === 0 && (
-                          <tr>
-                            <td colSpan={4} className="p-6 text-center text-white/50">
-                              No data matches the current filters
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Admin Audit Logs */}
-            <div className="bg-white/[0.05] border border-white/[0.1] rounded-xl overflow-hidden">
-              <div className="bg-[#00c6ff]/10 border-b border-[#00c6ff]/20 p-4">
-                <h2 className="text-xl font-semibold text-[#00c6ff]">Admin Audit Logs</h2>
-              </div>
-              
-              <div className="p-4">
-                <div className="flex flex-wrap gap-3 mb-4">
-                  <input
-                    value={filterAdmin}
-                    onChange={(e) => setFilterAdmin(e.target.value)}
-                    placeholder="Admin name"
-                    className="flex-1 min-w-[200px] bg-[#1c1c1c] border border-white/20 text-white p-2 rounded-lg"
-                  />
-                  
-                  <input
-                    value={filterAction}
-                    onChange={(e) => setFilterAction(e.target.value)}
-                    placeholder="Action"
-                    className="flex-1 min-w-[200px] bg-[#1c1c1c] border border-white/20 text-white p-2 rounded-lg"
-                  />
-                  
-                  <input
-                    value={filterDesc}
-                    onChange={(e) => setFilterDesc(e.target.value)}
-                    placeholder="Description"
-                    className="flex-1 min-w-[200px] bg-[#1c1c1c] border border-white/20 text-white p-2 rounded-lg"
-                  />
-                  
-                  <input
-                    value={filterTarget}
-                    onChange={(e) => setFilterTarget(e.target.value)}
-                    placeholder="Target Username"
-                    className="flex-1 min-w-[200px] bg-[#1c1c1c] border border-white/20 text-white p-2 rounded-lg"
-                  />
-                  
-                  <select
-                    value={logsLimit}
-                    onChange={(e) => setLogsLimit(Number(e.target.value))}
-                    className="bg-[#1c1c1c] border border-white/20 text-white p-2 rounded-lg"
-                  >
-                    <option value={15}>15 per page</option>
-                    <option value={25}>25 per page</option>
-                    <option value={50}>50 per page</option>
-                  </select>
-                </div>
-                
+
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead>
-                      <tr className="bg-white/[0.03] border-b border-white/10">
-                        <th className="p-3 text-left text-[#00c6ff] font-semibold">Admin</th>
-                        <th className="p-3 text-left text-[#00c6ff] font-semibold">Action</th>
-                        <th className="p-3 text-left text-[#00c6ff] font-semibold">Description</th>
-                        <th className="p-3 text-left text-[#00c6ff] font-semibold">Target</th>
-                        <th className="p-3 text-left text-[#00c6ff] font-semibold">Time</th>
+                    <thead className="bg-[#2a2a2a]">
+                      <tr>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Rank
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Page
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Total Time
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Sessions
+                        </th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {getFilteredAuditLogs().map(log => {
-                        const targetUser = users.find(u => u.discord_id === log.target_discord_id)
-                        
-                        return (
-                          <tr key={log.id} className="border-b border-white/5 hover:bg-white/[0.03]">
-                            <td className="p-3 font-semibold">{log.admin_name}</td>
-                            <td className="p-3">
-                              {/* FIXED: Action badges now use proper color mapping */}
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${getStatusBadgeClass(log.action || '')}`}>
-                                {log.action}
-                              </span>
-                            </td>
-                            <td className="p-3">{log.description}</td>
-                            <td className="p-3">{targetUser?.username || log.target_discord_id || 'N/A'}</td>
-                            <td className="p-3">{log.created_at ? formatDate(log.created_at) : 'N/A'}</td>
-                          </tr>
-                        )
-                      })}
-                      
-                      {getFilteredAuditLogs().length === 0 && (
+                    <tbody className="divide-y divide-white/5">
+                      {loadingState.analytics ? (
                         <tr>
-                          <td colSpan={5} className="p-6 text-center text-white/50">
-                            No logs match the current filters
+                          <td colSpan={4} className="p-8 text-center">
+                            <LoadingSpinner size="md" className="mx-auto" />
+                            <p className="mt-2 text-white/60">
+                              Loading analytics...
+                            </p>
                           </td>
                         </tr>
+                      ) : pageAnalytics.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="p-8 text-center text-white/60"
+                          >
+                            No page analytics data available
+                          </td>
+                        </tr>
+                      ) : (
+                        pageAnalytics.slice(0, 15).map((page, index) => (
+                          <tr
+                            key={page.page_path}
+                            className="hover:bg-white/5 transition-colors"
+                          >
+                            <td className="p-4 font-medium text-white/80">
+                              #{index + 1}
+                            </td>
+                            <td className="p-4">
+                              <span className="px-2 py-1 bg-[#2a2a2a] rounded text-sm font-mono">
+                                {page.page_path}
+                              </span>
+                            </td>
+                            <td className="p-4 font-medium text-white/90">
+                              {formatTime(page.total_time)}
+                            </td>
+                            <td className="p-4 text-white/80">
+                              {page.sessions}
+                            </td>
+                          </tr>
+                        ))
                       )}
                     </tbody>
                   </table>
                 </div>
-                
-                <div className="flex justify-center items-center gap-4 mt-4">
-                  <button
-                    onClick={() => setLogsPage(prev => Math.max(0, prev - 1))}
-                    disabled={logsPage === 0}
-                    className="px-4 py-2 bg-[#1c1c1c] border border-white/20 text-white rounded-lg disabled:opacity-50"
+              </div>
+
+              {/* User Page Analytics */}
+              <div className="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden">
+                <div className="bg-[#00c6ff]/10 border-b border-[#00c6ff]/20 p-4">
+                  <h2 className="text-xl font-semibold text-[#00c6ff]">
+                    User Page Analytics
+                  </h2>
+                </div>
+
+                <div className="p-4">
+                  <select
+                    value={selectedAnalyticsUser || ""}
+                    onChange={(e) =>
+                      setSelectedAnalyticsUser(e.target.value || null)
+                    }
+                    className="w-full p-2.5 mb-4 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#00c6ff] focus:ring-1 focus:ring-[#00c6ff]/30"
                   >
-                    ← Previous
-                  </button>
-                  
-                  <span className="text-white/70">Page {logsPage + 1}</span>
-                  
-                  <button
-                    onClick={() => setLogsPage(prev => prev + 1)}
-                    disabled={getFilteredAuditLogs().length < logsLimit}
-                    className="px-4 py-2 bg-[#1c1c1c] border border-white/20 text-white rounded-lg disabled:opacity-50"
-                  >
-                    Next →
-                  </button>
+                    <option value="">Select a user...</option>
+                    {topUsers.map((user) => (
+                      <option key={user.username} value={user.username}>
+                        {user.username}
+                      </option>
+                    ))}
+                  </select>
+
+                  {selectedAnalyticsUser && (
+                    <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="bg-[#2a2a2a] rounded-lg p-3 text-center">
+                        <div className="text-xl font-bold text-[#00c6ff] mb-1">
+                          {formatTime(getUserAnalyticsStats.totalTime)}
+                        </div>
+                        <div className="text-xs text-white/60">Total Time</div>
+                      </div>
+
+                      <div className="bg-[#2a2a2a] rounded-lg p-3 text-center">
+                        <div className="text-xl font-bold text-[#00c6ff] mb-1">
+                          {getUserAnalyticsStats.totalSessions}
+                        </div>
+                        <div className="text-xs text-white/60">
+                          Total Sessions
+                        </div>
+                      </div>
+
+                      <div className="bg-[#2a2a2a] rounded-lg p-3 text-center">
+                        <div className="text-xl font-bold text-[#00c6ff] mb-1">
+                          {getUserAnalyticsStats.uniquePages}
+                        </div>
+                        <div className="text-xs text-white/60">
+                          Unique Pages
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-[#2a2a2a]">
+                        <tr>
+                          <th className="p-4 text-left text-[#00c6ff] font-medium">
+                            Page
+                          </th>
+                          <th className="p-4 text-left text-[#00c6ff] font-medium">
+                            Sessions
+                          </th>
+                          <th className="p-4 text-left text-[#00c6ff] font-medium">
+                            Total Time
+                          </th>
+                          <th className="p-4 text-left text-[#00c6ff] font-medium">
+                            Avg Time
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {!selectedAnalyticsUser ? (
+                          <tr>
+                            <td
+                              colSpan={4}
+                              className="p-8 text-center text-white/60"
+                            >
+                              Select a user to view their page analytics
+                            </td>
+                          </tr>
+                        ) : loadingState.analytics ? (
+                          <tr>
+                            <td colSpan={4} className="p-8 text-center">
+                              <LoadingSpinner size="md" className="mx-auto" />
+                              <p className="mt-2 text-white/60">
+                                Loading user analytics...
+                              </p>
+                            </td>
+                          </tr>
+                        ) : userPageAnalytics.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={4}
+                              className="p-8 text-center text-white/60"
+                            >
+                              No page analytics data available for this user
+                            </td>
+                          </tr>
+                        ) : (
+                          userPageAnalytics.map((page) => (
+                            <tr
+                              key={page.page_path}
+                              className="hover:bg-white/5 transition-colors"
+                            >
+                              <td className="p-4">
+                                <span className="px-2 py-1 bg-[#2a2a2a] rounded text-sm font-mono">
+                                  {page.page_path}
+                                </span>
+                              </td>
+                              <td className="p-4 text-white/80">
+                                {page.sessions}
+                              </td>
+                              <td className="p-4 font-medium text-white/90">
+                                {formatTime(page.total_time)}
+                              </td>
+                              <td className="p-4 text-white/80">
+                                {formatTime(page.avg_time)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </TabsContent>
+        )}
+
+        {/* Logs Tab */}
+        {activeTab === "logs" && (
+          <div className="space-y-6">
+            <div className="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden">
+              <div className="bg-[#00c6ff]/10 border-b border-[#00c6ff]/20 p-4">
+                <h2 className="text-xl font-semibold text-[#00c6ff]">
+                  Admin Audit Logs
+                </h2>
+              </div>
+
+              <div className="p-4">
+                <div className="flex flex-wrap gap-3 mb-4">
+                  <input
+                    value={logFilters.admin}
+                    onChange={(e) =>
+                      setLogFilters({ ...logFilters, admin: e.target.value })
+                    }
+                    placeholder="Filter by admin"
+                    className="flex-1 min-w-[200px] p-2.5 bg-[#2a2a2a] border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-[#00c6ff] focus:ring-1 focus:ring-[#00c6ff]/30"
+                  />
+
+                  <input
+                    value={logFilters.action}
+                    onChange={(e) =>
+                      setLogFilters({ ...logFilters, action: e.target.value })
+                    }
+                    placeholder="Filter by action"
+                    className="flex-1 min-w-[200px] p-2.5 bg-[#2a2a2a] border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-[#00c6ff] focus:ring-1 focus:ring-[#00c6ff]/30"
+                  />
+
+                  <input
+                    value={logFilters.target}
+                    onChange={(e) =>
+                      setLogFilters({ ...logFilters, target: e.target.value })
+                    }
+                    placeholder="Filter by target"
+                    className="flex-1 min-w-[200px] p-2.5 bg-[#2a2a2a] border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-[#00c6ff] focus:ring-1 focus:ring-[#00c6ff]/30"
+                  />
+
+                  <select
+                    value={logLimit}
+                    onChange={(e) => {
+                      const newLimit = parseInt(e.target.value);
+                      setLogLimit(newLimit);
+                      setLogPage(0);
+                      loadLogs(0, newLimit, logFilters);
+                    }}
+                    className="p-2.5 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#00c6ff] focus:ring-1 focus:ring-[#00c6ff]/30"
+                  >
+                    <option value="15">15 per page</option>
+                    <option value="25">25 per page</option>
+                    <option value="50">50 per page</option>
+                  </select>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-[#2a2a2a]">
+                      <tr>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Admin
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Action
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Description
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Target
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Time
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {loadingState.logs ? (
+                        <tr>
+                          <td colSpan={5} className="p-8 text-center">
+                            <LoadingSpinner size="md" className="mx-auto" />
+                            <p className="mt-2 text-white/60">
+                              Loading logs...
+                            </p>
+                          </td>
+                        </tr>
+                      ) : logs.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="p-8 text-center text-white/60"
+                          >
+                            No logs found matching your criteria
+                          </td>
+                        </tr>
+                      ) : (
+                        logs.map((log) => {
+                          const targetUser = users.find(
+                            (u) => u.discord_id === log.target_discord_id
+                          );
+
+                          return (
+                            <tr
+                              key={log.id}
+                              className="hover:bg-white/5 transition-colors"
+                            >
+                              <td className="p-4 font-medium">
+                                {log.admin_name}
+                              </td>
+                              <td className="p-4">
+                                <span
+                                  className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                                    log.action
+                                      ?.toLowerCase()
+                                      .includes("whitelist")
+                                      ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                      : log.action
+                                          ?.toLowerCase()
+                                          .includes("revoke")
+                                      ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                                      : log.action
+                                          ?.toLowerCase()
+                                          .includes("trial")
+                                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                      : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                                  }`}
+                                >
+                                  {log.action}
+                                </span>
+                              </td>
+                              <td className="p-4 text-white/80">
+                                {log.description}
+                              </td>
+                              <td className="p-4 text-white/80">
+                                {targetUser?.username ||
+                                  log.target_discord_id ||
+                                  "N/A"}
+                              </td>
+                              <td className="p-4 text-white/80">
+                                {formatDate(log.created_at)}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                <div className="flex justify-between items-center mt-4">
+                  <div className="text-sm text-white/60">
+                    Showing {logPage * logLimit + 1}-
+                    {Math.min((logPage + 1) * logLimit, logCount)} of {logCount}{" "}
+                    logs
+                  </div>
+
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => {
+                        const newPage = Math.max(0, logPage - 1);
+                        setLogPage(newPage);
+                        loadLogs(newPage, logLimit, logFilters);
+                      }}
+                      disabled={logPage === 0}
+                      className="px-3 py-1.5 bg-[#2a2a2a] text-white rounded hover:bg-[#3a3a3a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const newPage = logPage + 1;
+                        setLogPage(newPage);
+                        loadLogs(newPage, logLimit, logFilters);
+                      }}
+                      disabled={(logPage + 1) * logLimit >= logCount}
+                      className="px-3 py-1.5 bg-[#2a2a2a] text-white rounded hover:bg-[#3a3a3a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      
-      {/* Side Panel */}
-      {sidePanelOpen && selectedUser && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div 
+
+      {/* User Detail Panel */}
+      {userDetailOpen && selectedUser && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setSidePanelOpen(false)}
+            onClick={() => setUserDetailOpen(false)}
           ></div>
-          
-          <div className="relative w-full max-w-md bg-[#141414] border-l border-white/10 overflow-y-auto">
-            <div className="p-6 border-b border-white/10 flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-[#00c6ff]">User Details</h2>
-              <button 
-                onClick={() => setSidePanelOpen(false)}
-                className="text-white/70 hover:text-white text-xl"
+
+          <div
+            ref={userDetailRef}
+            className="absolute right-0 top-0 h-full w-full max-w-md bg-[#1a1a1a] border-l border-white/10 overflow-y-auto"
+          >
+            <div className="sticky top-0 z-10 bg-[#1a1a1a] border-b border-white/10 p-4 flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-[#00c6ff]">
+                User Details
+              </h2>
+              <button
+                onClick={() => setUserDetailOpen(false)}
+                className="p-1 rounded-full hover:bg-white/10 transition-colors"
               >
                 ✕
               </button>
             </div>
-            
+
             <div className="p-6 space-y-6">
               {/* User Info */}
-              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 space-y-3">
-                <h3 className="text-lg font-semibold text-[#00c6ff] mb-2">User Information</h3>
-                
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-white/70">Discord ID:</span>
-                  <span className="font-semibold">{selectedUser.discord_id}</span>
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      onlineUsers.has(selectedUser.discord_id)
+                        ? "bg-green-500"
+                        : "bg-gray-500"
+                    }`}
+                  ></div>
+                  <h3 className="text-xl font-semibold">
+                    {selectedUser.username || "Unknown User"}
+                  </h3>
                 </div>
-                
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-white/70">Username:</span>
-                  <span className="font-semibold">{selectedUser.username || 'N/A'}</span>
+
+                <div className="text-sm font-mono text-white/60 bg-[#2a2a2a] p-2 rounded">
+                  {selectedUser.discord_id}
                 </div>
-                
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-white/70">Status:</span>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
-                    selectedUser.revoked 
-                      ? getStatusBadgeClass('revoked') 
-                      : getStatusBadgeClass('whitelisted')
-                  }`}>
-                    {selectedUser.revoked ? 'REVOKED' : 'ACCESS'}
-                  </span>
-                </div>
-                
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-white/70">Account Type:</span>
-                  <span className="font-semibold">
-                    {adminDiscordIds.includes(selectedUser.discord_id) ? (
-                      <span className="px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-[#ffd700] to-[#ffed4e] text-black rounded-md">
-                        ADMIN
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-[#2a2a2a] p-3 rounded-lg">
+                    <div className="text-xs text-white/60 mb-1">Status</div>
+                    <div className="font-medium">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          selectedUser.revoked === false
+                            ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                            : "bg-red-500/20 text-red-400 border border-red-500/30"
+                        }`}
+                      >
+                        {selectedUser.revoked === false
+                          ? "WHITELISTED"
+                          : "REVOKED"}
                       </span>
-                    ) : 'Regular User'}
-                  </span>
-                </div>
-                
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-white/70">Created:</span>
-                  <span className="font-semibold">{formatDate(selectedUser.created_at)}</span>
-                </div>
-                
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-white/70">Last Login:</span>
-                  <span className="font-semibold">
-                    {selectedUser.last_login ? formatDate(selectedUser.last_login) : 'Never'}
-                  </span>
-                </div>
-                
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-white/70">Login Count:</span>
-                  <span className="font-semibold">{selectedUser.login_count || 0}</span>
-                </div>
-                
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-white/70">Trial Status:</span>
-                  <span>
-                    {selectedUser.hub_trial ? (
-                      selectedUser.trial_expiration && new Date(selectedUser.trial_expiration) > new Date() ? (
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${getStatusBadgeClass('trial')}`}>
-                          {getTrialStatus(selectedUser)}
+                    </div>
+                  </div>
+
+                  <div className="bg-[#2a2a2a] p-3 rounded-lg">
+                    <div className="text-xs text-white/60 mb-1">Trial</div>
+                    <div className="font-medium">
+                      {selectedUser.hub_trial ? (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            selectedUser.trial_expiration &&
+                            new Date(selectedUser.trial_expiration) > new Date()
+                              ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                              : "bg-red-500/20 text-red-400 border border-red-500/30"
+                          }`}
+                        >
+                          {getTrialStatus(selectedUser)?.text || "TRIAL"}
                         </span>
                       ) : (
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${getStatusBadgeClass('revoked')}`}>
-                          EXPIRED
-                        </span>
-                      )
-                    ) : 'N/A'}
-                  </span>
+                        <span className="text-white/40">N/A</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-white/70">Session:</span>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
-                    onlineUsers.has(selectedUser.discord_id)
-                      ? getStatusBadgeClass('online')
-                      : getStatusBadgeClass('offline')
-                  }`}>
-                    {onlineUsers.has(selectedUser.discord_id) ? 'ONLINE' : 'OFFLINE'}
-                  </span>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-[#2a2a2a] p-3 rounded-lg">
+                    <div className="text-xs text-white/60 mb-1">Created</div>
+                    <div className="font-medium">
+                      {formatDate(selectedUser.created_at)}
+                    </div>
+                  </div>
+
+                  <div className="bg-[#2a2a2a] p-3 rounded-lg">
+                    <div className="text-xs text-white/60 mb-1">Last Login</div>
+                    <div className="font-medium">
+                      {formatLastLogin(selectedUser.last_login)}
+                    </div>
+                  </div>
                 </div>
-                
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-white/70">Blueprints:</span>
-                  <span className="font-semibold">{userBlueprints.length} Selected</span>
+
+                <div className="bg-[#2a2a2a] p-3 rounded-lg">
+                  <div className="text-xs text-white/60 mb-1">Login Count</div>
+                  <div className="font-medium">
+                    {selectedUser.login_count || 0}
+                  </div>
                 </div>
               </div>
-              
-              {/* Quick Actions */}
-              <div className="bg-white/[0.02] border border-white/[0.05] rounded-xl p-4 space-y-3">
-                <h3 className="text-lg font-semibold text-[#00c6ff] mb-2">Quick Actions</h3>
-                
-                <button
-                  onClick={() => updateUserStatus(selectedUser.discord_id, !selectedUser.revoked)}
-                  className={`w-full py-3 px-4 rounded-lg font-semibold ${
-                    selectedUser.revoked
-                      ? 'bg-green-600 text-white hover:bg-green-700'
-                      : 'bg-red-600 text-white hover:bg-red-700'
-                  } transition-colors`}
-                >
-                  {selectedUser.revoked ? 'Whitelist User' : 'Revoke Access'}
-                </button>
-                
-                {/* New Feature: Convert Trial to Permanent */}
-                {selectedUser.hub_trial && selectedUser.trial_expiration && new Date(selectedUser.trial_expiration) > new Date() && (
-                  <button
-                    onClick={() => convertTrialToPermanent(selectedUser.discord_id)}
-                    className="w-full py-3 px-4 bg-gradient-to-r from-[#ffd700] to-[#ffed4e] text-black font-semibold rounded-lg hover:shadow-lg transition-all"
-                  >
-                    Convert Trial to Permanent
-                  </button>
+
+              {/* Blueprints */}
+              <div>
+                <h3 className="text-lg font-semibold text-[#00c6ff] mb-3">
+                  Blueprints
+                </h3>
+
+                {userBlueprints.length === 0 ? (
+                  <div className="text-center py-4 text-white/60 bg-[#2a2a2a] rounded-lg">
+                    No blueprints selected
+                  </div>
+                ) : (
+                  <div className="bg-[#2a2a2a] p-3 rounded-lg max-h-[200px] overflow-y-auto">
+                    <div className="grid grid-cols-1 gap-2">
+                      {userBlueprints.map((blueprint) => (
+                        <div
+                          key={blueprint}
+                          className="px-3 py-2 bg-[#3a3a3a] rounded text-sm"
+                        >
+                          {blueprint}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
-                
-                {/* FIXED: Improved trial button colors - changed from dark yellow to lighter, more appealing colors */}
-                <button
-                  onClick={() => updateTrialTime(selectedUser.discord_id, 7)}
-                  className="w-full py-3 px-4 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 transition-colors"
-                >
-                  Add 7 Day Trial
-                </button>
-                
-                <button
-                  onClick={() => updateTrialTime(selectedUser.discord_id, 30)}
-                  className="w-full py-3 px-4 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors"
-                >
-                  Add 30 Day Trial
-                </button>
-                
-                <button
-                  onClick={() => {
-                    const days = prompt('Enter number of days for trial:')
-                    if (days && !isNaN(Number(days)) && Number(days) > 0) {
-                      updateTrialTime(selectedUser.discord_id, Number(days))
-                    }
-                  }}
-                  className="w-full py-3 px-4 bg-[#00c6ff] text-black font-semibold rounded-lg hover:bg-[#00a9db] transition-colors"
-                >
-                  Custom Trial Duration
-                </button>
-                
-                <button
-                  onClick={() => deleteUser(selectedUser.discord_id)}
-                  className="w-full py-3 px-4 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Delete User
-                </button>
-                
-                <button
-                  onClick={() => {
-                    // Show blueprints in a modal or alert
-                    alert(`User has ${userBlueprints.length} blueprints selected:\n\n${userBlueprints.join('\n')}`)
-                  }}
-                  className="w-full py-3 px-4 bg-white/10 text-white font-semibold rounded-lg hover:bg-white/20 transition-colors"
-                >
-                  Show Blueprints
-                </button>
               </div>
-              
-              {/* Audit Log */}
-              <div className="bg-white/[0.02] border border-white/[0.05] rounded-xl p-4">
-                <h3 className="text-lg font-semibold text-[#00c6ff] mb-4">Audit Log</h3>
-                
-                <div className="max-h-[300px] overflow-y-auto space-y-3">
-                  {auditLogs
-                    .filter(log => log.target_discord_id === selectedUser.discord_id)
-                    .slice(0, 10)
-                    .map(log => {
-                      const actionClass = 
-                        log.action?.toLowerCase().includes('whitelist') ? 'bg-green-500/20 border-green-500/30' :
-                        log.action?.toLowerCase().includes('revoke') ? 'bg-red-500/20 border-red-500/30' :
-                        log.action?.toLowerCase().includes('trial') ? 'bg-yellow-500/20 border-yellow-500/30' :
-                        'bg-blue-500/20 border-blue-500/30'
-                      
-                      return (
-                        <div key={log.id} className="flex items-start gap-3 p-3 bg-black/20 rounded-lg">
-                          <div className={`w-2 h-2 rounded-full mt-2 ${
-                            log.action?.toLowerCase().includes('whitelist') ? 'bg-green-500' :
-                            log.action?.toLowerCase().includes('revoke') ? 'bg-red-500' :
-                            log.action?.toLowerCase().includes('trial') ? 'bg-yellow-500' :
-                            'bg-blue-500'
-                          }`}></div>
-                          
-                          <div className="flex-1">
-                            <div className="font-semibold">{log.description}</div>
-                            <div className="text-sm text-white/70">by {log.admin_name}</div>
-                            <div className="text-xs text-white/50 mt-1">
-                              {log.created_at ? formatRelativeTime(log.created_at) : 'N/A'}
+
+              {/* Actions */}
+              <div>
+                <h3 className="text-lg font-semibold text-[#00c6ff] mb-3">
+                  Actions
+                </h3>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() =>
+                      performUserAction(
+                        selectedUser.revoked === false ? "REVOKE" : "WHITELIST",
+                        selectedUser.discord_id,
+                        selectedUser.username || "Unknown"
+                      )
+                    }
+                    className={`w-full py-2.5 px-4 rounded-lg font-medium ${
+                      selectedUser.revoked === false
+                        ? "bg-red-600 text-white hover:bg-red-700"
+                        : "bg-green-600 text-white hover:bg-green-700"
+                    } transition-colors`}
+                  >
+                    {selectedUser.revoked === false
+                      ? "Revoke Access"
+                      : "Whitelist User"}
+                  </button>
+
+                  {selectedUser.hub_trial &&
+                    selectedUser.trial_expiration &&
+                    new Date(selectedUser.trial_expiration) > new Date() && (
+                      <button
+                        onClick={() =>
+                          performUserAction(
+                            "CONVERT_TRIAL",
+                            selectedUser.discord_id,
+                            selectedUser.username || "Unknown"
+                          )
+                        }
+                        className="w-full py-2.5 px-4 bg-gradient-to-r from-[#ffd700] to-[#ffed4e] text-black font-medium rounded-lg hover:from-[#ffed4e] hover:to-[#ffd700] transition-colors"
+                      >
+                        Convert Trial to Premium
+                      </button>
+                    )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() =>
+                        performUserAction(
+                          "TRIAL_7",
+                          selectedUser.discord_id,
+                          selectedUser.username || "Unknown"
+                        )
+                      }
+                      className="py-2.5 px-4 bg-amber-500 text-white font-medium rounded-lg hover:bg-amber-600 transition-colors"
+                    >
+                      7 Day Trial
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        performUserAction(
+                          "TRIAL_30",
+                          selectedUser.discord_id,
+                          selectedUser.username || "Unknown"
+                        )
+                      }
+                      className="py-2.5 px-4 bg-amber-600 text-white font-medium rounded-lg hover:bg-amber-700 transition-colors"
+                    >
+                      30 Day Trial
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `Are you sure you want to delete user ${
+                            selectedUser.username || selectedUser.discord_id
+                          }? This action cannot be undone.`
+                        )
+                      ) {
+                        // Delete user logic
+                        setUserDetailOpen(false);
+                      }
+                    }}
+                    className="w-full py-2.5 px-4 bg-red-600/80 text-white font-medium rounded-lg hover:bg-red-600 transition-colors"
+                  >
+                    Delete User
+                  </button>
+                </div>
+              </div>
+
+              {/* Recent Logs */}
+              <div>
+                <h3 className="text-lg font-semibold text-[#00c6ff] mb-3">
+                  Recent Activity
+                </h3>
+
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {logs
+                    .filter(
+                      (log) => log.target_discord_id === selectedUser.discord_id
+                    )
+                    .slice(0, 5)
+                    .map((log) => (
+                      <div key={log.id} className="bg-[#2a2a2a] p-3 rounded-lg">
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={`inline-block w-2 h-2 rounded-full mt-2 ${
+                              log.action?.toLowerCase().includes("whitelist")
+                                ? "bg-green-500"
+                                : log.action?.toLowerCase().includes("revoke")
+                                ? "bg-red-500"
+                                : log.action?.toLowerCase().includes("trial")
+                                ? "bg-amber-500"
+                                : "bg-blue-500"
+                            }`}
+                          ></span>
+                          <div>
+                            <div className="font-medium">{log.description}</div>
+                            <div className="text-sm text-white/60 mt-1">
+                              by {log.admin_name} •{" "}
+                              {formatLastLogin(log.created_at)}
                             </div>
                           </div>
                         </div>
-                      )
-                    })}
-                  
-                  {auditLogs.filter(log => log.target_discord_id === selectedUser.discord_id).length === 0 && (
-                    <div className="text-center py-4 text-white/50">
-                      No audit logs for this user
+                      </div>
+                    ))}
+
+                  {logs.filter(
+                    (log) => log.target_discord_id === selectedUser.discord_id
+                  ).length === 0 && (
+                    <div className="text-center py-4 text-white/60 bg-[#2a2a2a] rounded-lg">
+                      No activity logs found
                     </div>
                   )}
                 </div>
@@ -2000,15 +2159,6 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       )}
-      
-      {/* Toast Notification */}
-      {toast && (
-        <Toast 
-          message={toast.message} 
-          type={toast.type} 
-          onClose={() => setToast(null)} 
-        />
-      )}
     </div>
-  )
+  );
 }

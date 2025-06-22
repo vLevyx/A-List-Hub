@@ -4,6 +4,15 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
 
+/* Font loading optimization */
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('');
+}
+
 :root {
   --foreground-rgb: 255, 255, 255;
   --background-start-rgb: 18, 18, 18;

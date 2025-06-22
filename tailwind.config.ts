@@ -50,6 +50,42 @@ const config: Config = {
       }
     },
   },
-  plugins: [],
+  plugins: [
+    function({ addUtilities }: { addUtilities: any }) {
+      const newUtilities = {
+        '.dark-dropdown': {
+          'background-color': '#2a2a2a !important',
+          'border': '1px solid rgba(255, 255, 255, 0.2) !important',
+          'color': 'white !important',
+          'border-radius': '8px',
+          'padding': '12px',
+          'font-size': '14px',
+          'appearance': 'none',
+          '-webkit-appearance': 'none',
+          '-moz-appearance': 'none',
+          'background-image': `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+          'background-position': 'right 12px center',
+          'background-repeat': 'no-repeat',
+          'background-size': '16px',
+          'padding-right': '40px',
+          'transition': 'border-color 0.2s ease',
+          '&:hover': {
+            'border-color': 'rgba(255, 255, 255, 0.3) !important',
+          },
+          '&:focus': {
+            'outline': 'none !important',
+            'border-color': '#00c6ff !important',
+          },
+        },
+        '.dark-dropdown option': {
+          'background-color': '#2a2a2a !important',
+          'color': 'white !important',
+          'border': 'none !important',
+          'padding': '8px 12px !important',
+        }
+      }
+      addUtilities(newUtilities)
+    }
+  ],
 }
 export default config
