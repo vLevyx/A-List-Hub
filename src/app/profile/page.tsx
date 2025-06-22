@@ -726,7 +726,7 @@ export default function ProfilePage() {
   const { total, selected } = getBlueprintCounts();
 
   // Render loading skeleton
-  if (authLoading) {
+  if (authLoading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0a0a] to-[#1a1a1a]">
         <div className="flex flex-col items-center space-y-4">
