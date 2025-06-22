@@ -1,11 +1,11 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Admin Dashboard',
-  description: 'Admin dashboard for managing users and viewing analytics',
+  title: 'Middleman Market',
+  description: 'Request a trusted middleman for secure trades in ELAN Life',
 }
 
-export default function AdminLayout({
+export default function MiddlemanLayout({
   children,
 }: {
   children: React.ReactNode

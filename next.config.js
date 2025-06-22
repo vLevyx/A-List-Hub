@@ -4,11 +4,32 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react']
   },
   images: {
-    domains: [
-      'cdn.discordapp.com',
-      'flagcdn.com',
-      'api.battlemetrics.com',
-      'icons.iconarchive.com'
+    // Replace the deprecated 'domains' with 'remotePatterns'
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'cdn.discordapp.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'flagcdn.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'api.battlemetrics.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'icons.iconarchive.com',
+        port: '',
+        pathname: '/**',
+      },
     ],
     formats: ['image/webp', 'image/avif']
   },
@@ -18,15 +39,7 @@ const nextConfig = {
   swcMinify: true,
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production'
-  },
-
-  // Add this block:
-  webpack(config) {
-    // Disable “Critical dependency: the request of a dependency is an expression”
-    config.module.exprContextCritical = false
-
-    return config
-  },
+  }
 }
 
 module.exports = nextConfig
