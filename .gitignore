@@ -1,7 +1,11 @@
 # Dependencies
 node_modules/
 
-# Environment variables
+.next/
+
+# local env files
+.env*.local
+
 .env
 .env.local
 .env.development.local

@@ -1,117 +1,118 @@
-'use client'
+"use client";
 
-import { useState, useEffect, useRef } from 'react'
-import Link from 'next/link'
-import Image from 'next/image'
-import { useAuth } from '@/hooks/useAuth'
-import { getAvatarUrl, getUsername, isUserMiddleman } from '@/lib/utils'
-import { Button } from '@/components/ui/Button'
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { ChevronDown, LogOut, User, Settings, Shield } from 'lucide-react'
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { useAuth } from "@/hooks/useAuth";
+import { getAvatarUrl, getUsername } from "@/lib/utils";
+import { Button } from "@/components/ui/Button";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { ChevronDown, LogOut, User, Settings, Shield } from "lucide-react";
 
 const ADMIN_DISCORD_IDS = [
   "154388953053659137",
   "344637470908088322",
   "796587763851198474",
   "492053410967846933",
-  "487476487386038292"
-]
+  "487476487386038292",
+];
 
 // Default avatar for fallback
-const DEFAULT_AVATAR = 'https://cdn.discordapp.com/embed/avatars/0.png'
+const DEFAULT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png";
 
 export function Navbar() {
-  const { user, loading, signInWithDiscord, signOut } = useAuth()
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [avatarSrc, setAvatarSrc] = useState<string>(DEFAULT_AVATAR)
-  const [username, setUsername] = useState<string>('Loading...')
-  const [avatarLoaded, setAvatarLoaded] = useState<boolean>(false)
-  const [isAdmin, setIsAdmin] = useState<boolean>(false)
-  const [isMiddleman, setIsMiddleman] = useState<boolean>(false)
-  
-  const menuRef = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  
-  // Simplified user data loading
+  const { user, loading, signInWithDiscord, signOut } = useAuth();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [avatarSrc, setAvatarSrc] = useState<string>(DEFAULT_AVATAR);
+  const [username, setUsername] = useState<string>("");
+  const [avatarLoaded, setAvatarLoaded] = useState<boolean>(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+
+  // Refs for tracking loading states and timeouts
+  const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Handle user data loading with simplified logic
   useEffect(() => {
     if (!user) {
-      setAvatarSrc(DEFAULT_AVATAR)
-      setUsername('Loading...')
-      setAvatarLoaded(false)
-      setIsAdmin(false)
-      setIsMiddleman(false)
-      return
+      setAvatarSrc(DEFAULT_AVATAR);
+      setUsername("");
+      setAvatarLoaded(false);
+      setIsAdmin(false);
+      return;
     }
-    
+
     // Check if user is admin
-    const discordId = user?.user_metadata?.provider_id
-    setIsAdmin(Boolean(discordId && ADMIN_DISCORD_IDS.includes(discordId)))
-    
-    // Check if user is middleman using the utility function
-    setIsMiddleman(isUserMiddleman(user))
-    
-    // Load username immediately with fallback
-    const displayName = getUsername(user)
-    setUsername(displayName)
-    
-    // Load avatar with simple fallback
-    const avatarUrl = getAvatarUrl(user)
-    setAvatarSrc(avatarUrl)
-    
-    // Simple image preload to set loaded state
-    const img = new window.Image()
-    img.onload = () => setAvatarLoaded(true)
-    img.onerror = () => {
-      setAvatarSrc(DEFAULT_AVATAR)
-      setAvatarLoaded(true)
+    const discordId = user?.user_metadata?.provider_id;
+    setIsAdmin(!!discordId && ADMIN_DISCORD_IDS.includes(discordId));
+
+    // Set username immediately with fallback
+    const displayName =
+      getUsername(user) ||
+      user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      "Discord User";
+    setUsername(displayName);
+
+    // Set avatar with immediate fallback
+    const avatarUrl = getAvatarUrl(user);
+    if (avatarUrl && avatarUrl !== DEFAULT_AVATAR) {
+      setAvatarSrc(avatarUrl);
+    } else {
+      setAvatarSrc(DEFAULT_AVATAR);
     }
-    img.src = avatarUrl
-    
-  }, [user])
-  
+    setAvatarLoaded(true);
+  }, [user]);
+
   // Handle click outside to close menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        isMenuOpen && 
-        menuRef.current && 
-        buttonRef.current && 
-        !menuRef.current.contains(event.target as Node) && 
+        isMenuOpen &&
+        menuRef.current &&
+        buttonRef.current &&
+        !menuRef.current.contains(event.target as Node) &&
         !buttonRef.current.contains(event.target as Node)
       ) {
-        setIsMenuOpen(false)
+        setIsMenuOpen(false);
       }
-    }
-    
-    document.addEventListener('mousedown', handleClickOutside)
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [isMenuOpen])
-  
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isMenuOpen]);
+
   // Handle escape key to close menu
   useEffect(() => {
     const handleEscKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && isMenuOpen) {
-        setIsMenuOpen(false)
+      if (event.key === "Escape" && isMenuOpen) {
+        setIsMenuOpen(false);
       }
-    }
-    
-    document.addEventListener('keydown', handleEscKey)
+    };
+
+    document.addEventListener("keydown", handleEscKey);
     return () => {
-      document.removeEventListener('keydown', handleEscKey)
-    }
-  }, [isMenuOpen])
+      document.removeEventListener("keydown", handleEscKey);
+    };
+  }, [isMenuOpen]);
 
   // Remove the loading state return - let navbar render immediately
   // This prevents the blocking loading state mentioned in the optimization
+
+  //Temporary
+  const isMiddleman = false;
 
   return (
     <nav className="backdrop-blur-md bg-background-secondary/60 border-b border-white/5 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Link href="/" className="text-xl font-bold text-primary-500">
-            A-List Hub <span className="absolute -top-0.5 -right-6 text-[0.60rem] bg-primary-500 text-black px-1.5 py-0.5 rounded-sm font-bold leading-none">v2</span>
+            A-List Hub{" "}
+            <span className="absolute -top-0.5 -right-6 text-[0.60rem] bg-primary-500 text-black px-1.5 py-0.5 rounded-sm font-bold leading-none">
+              v2
+            </span>
           </Link>
 
           {user ? (
@@ -134,17 +135,25 @@ export function Navbar() {
                     alt="Profile"
                     width={32}
                     height={32}
-                    className={`rounded-full transition-opacity duration-300 ${avatarLoaded ? 'opacity-100' : 'opacity-0'}`}
+                    className={`rounded-full transition-opacity duration-300 ${
+                      avatarLoaded ? "opacity-100" : "opacity-0"
+                    }`}
                     onLoad={() => setAvatarLoaded(true)}
                     onError={() => {
-                      setAvatarSrc(DEFAULT_AVATAR)
-                      setAvatarLoaded(true)
+                      setAvatarSrc(DEFAULT_AVATAR);
+                      setAvatarLoaded(true);
                     }}
                     priority
                   />
                 </div>
-                <span className="hidden sm:block font-medium max-w-[150px] truncate">{username}</span>
-                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isMenuOpen ? 'rotate-180' : ''}`} />
+                <span className="hidden sm:block font-medium max-w-[150px] truncate">
+                  {username || "Discord User"}
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 transition-transform duration-200 ${
+                    isMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
               </button>
 
               {isMenuOpen && (
@@ -189,8 +198,8 @@ export function Navbar() {
                     </Link>
                     <button
                       onClick={() => {
-                        setIsMenuOpen(false)
-                        signOut()
+                        setIsMenuOpen(false);
+                        signOut();
                       }}
                       className="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-white/10 transition-colors rounded-b-lg"
                       role="menuitem"
@@ -203,13 +212,21 @@ export function Navbar() {
               )}
             </div>
           ) : (
-            <Button 
-              onClick={signInWithDiscord} 
+            <Button
+              onClick={signInWithDiscord}
               variant="secondary"
               className="flex items-center space-x-2"
             >
-              <svg width="20" height="20" viewBox="0 0 71 55" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-2">
-                <path d="M60.1045 4.8978C55.5792 2.8214 50.7265 1.2916 45.6527 0.41542C45.5603 0.39851 45.468 0.440769 45.4204 0.525289C44.7963 1.6353 44.105 3.0834 43.6209 4.2216C38.1637 
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 71 55"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="mr-2"
+              >
+                <path
+                  d="M60.1045 4.8978C55.5792 2.8214 50.7265 1.2916 45.6527 0.41542C45.5603 0.39851 45.468 0.440769 45.4204 0.525289C44.7963 1.6353 44.105 3.0834 43.6209 4.2216C38.1637 
                 3.4046 32.7345 3.4046 27.3892 4.2216C26.905 3.0581 26.1886 1.6353 25.5617 0.525289C25.5141 0.443589 25.4218 0.40133 25.3294 0.41542C20.2584 1.2888 15.4057 2.8186 10.8776 
                 4.8978C10.8384 4.9147 10.8048 4.9429 10.7825 4.9795C1.57795 18.7309 -0.943561 32.1443 0.293408 45.3914C0.299005 45.4562 0.335386 45.5182 0.385761 45.5576C6.45866 50.0174 
                 12.3413 52.7249 18.1147 54.5195C18.2071 54.5477 18.305 54.5139 18.3638 54.4378C19.7295 52.5728 20.9469 50.6063 21.9907 48.5383C22.0523 48.4172 21.9935 48.2735 21.8676 
@@ -219,7 +236,9 @@ export function Navbar() {
                 54.435C52.6519 54.5139 52.7526 54.5477 52.845 54.5195C58.6464 52.7249 64.529 50.0174 70.6019 45.5576C70.6551 45.5182 70.6887 45.459 70.6943 45.3942C72.1747 30.0791 68.2147 
                 16.7757 60.1968 4.9823C60.1772 4.9429 60.1437 4.9147 60.1045 4.8978ZM23.7259 37.3253C20.2276 37.3253 17.3451 34.1136 17.3451 30.1693C17.3451 26.225 20.1717 23.0133 23.7259 
                 23.0133C27.308 23.0133 30.1626 26.2532 30.1066 30.1693C30.1066 34.1136 27.28 37.3253 23.7259 37.3253ZM47.3178 37.3253C43.8196 37.3253 40.9371 34.1136 40.9371 30.1693C40.9371 
-                26.225 43.7636 23.0133 47.3178 23.0133C50.9 23.0133 53.7545 26.2532 53.6986 30.1693C53.6986 34.1136 50.9 37.3253 47.3178 37.3253Z" fill="currentColor"/>
+                26.225 43.7636 23.0133 47.3178 23.0133C50.9 23.0133 53.7545 26.2532 53.6986 30.1693C53.6986 34.1136 50.9 37.3253 47.3178 37.3253Z"
+                  fill="currentColor"
+                />
               </svg>
               Login with Discord
             </Button>
@@ -227,5 +246,5 @@ export function Navbar() {
         </div>
       </div>
     </nav>
-  )
+  );
 }
