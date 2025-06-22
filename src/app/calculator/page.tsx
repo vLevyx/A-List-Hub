@@ -1532,7 +1532,7 @@ export default function CalculatorPage() {
     setShowBreakdown(true);
   };
 
-  if (loading && !user) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background-primary via-background-secondary to-background-primary">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-500"></div>
