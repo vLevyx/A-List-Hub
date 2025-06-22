@@ -104,6 +104,27 @@ export function Navbar() {
   //Check if user is a middleman
   const isMiddleman = isUserMiddleman(user);
 
+  if (loading) {
+    return (
+      <nav className="backdrop-blur-md bg-background-secondary/60 border-b border-white/5 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <Link href="/" className="text-xl font-bold text-primary-500">
+              A-List Hub{" "}
+              <span className="absolute -top-0.5 -right-6 text-[0.60rem] bg-primary-500 text-black px-1.5 py-0.5 rounded-sm font-bold leading-none">
+                v2
+              </span>
+            </Link>
+            <div className="flex items-center space-x-2">
+              <span className="text-white/50 text-sm mr-2">Loading</span>
+              <LoadingSpinner size="md" />
+            </div>
+          </div>
+        </div>
+      </nav>
+    );
+  }
+
   return (
     <nav className="backdrop-blur-md bg-background-secondary/60 border-b border-white/5 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
