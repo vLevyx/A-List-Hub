@@ -69,7 +69,7 @@ interface Scammer {
 export default function MiddlemanMarketPage(): ReactElement {
   usePageTracking();
   const router = useRouter();
-  const { user, loading } = useAuth()
+  const { user, loading } = useAuth();
   const supabase = createClient();
 
   // Form state
@@ -316,27 +316,35 @@ export default function MiddlemanMarketPage(): ReactElement {
   };
 
   // Loading and access guards
-  if (loading) {
+  if (loading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#121212] to-[#1a1a1a]">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
+
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#121212] to-[#1a1a1a] p-4">
         <div className="max-w-md w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-6 text-center">
           <h2 className="text-2xl font-bold text-white mb-4">Login Required</h2>
           <p className="text-white/80 mb-6">
-            The Middleman Market is a non-premium service to use but requires Discord login for verification purposes.
+            The Middleman Market is a non-premium service to use but requires
+            Discord login for verification purposes.
           </p>
           <div className="space-y-3">
-            <Button onClick={() => router.push("/")} variant="default" size="lg" className="w-full">
+            <Button
+              onClick={() => router.push("/")}
+              variant="default"
+              size="lg"
+              className="w-full"
+            >
               Return to Home & Login
             </Button>
             <p className="text-white/60 text-sm">
-              ⭐ <strong>Non-Premium Service</strong> - No premium subscription required!
+              ⭐ <strong>Non-Premium Service</strong> - No premium subscription
+              required!
             </p>
           </div>
         </div>
