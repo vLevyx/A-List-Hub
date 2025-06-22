@@ -316,7 +316,7 @@ export default function MiddlemanMarketPage(): ReactElement {
   };
 
   // Loading and access guards
-  if (loading) {
+  if (loading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#121212] to-[#1a1a1a]">
         <LoadingSpinner size="lg" />

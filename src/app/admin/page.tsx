@@ -994,7 +994,7 @@ export default function AdminPage() {
     };
   }, [selectedAnalyticsUser, userPageAnalytics]);
 
-  if (loading) {
+  if (loading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#121212]">
         <LoadingSpinner size="lg" />
