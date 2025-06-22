@@ -457,6 +457,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [state.user]);
 
+  //Ensures user loading is false whenever there is a user
+  useEffect(() => {
+    if (state.user && state.loading) {
+      setState((prev) => ({ ...prev, loading: false }));
+    }
+  }, [state.user, state.loading]);
+
   return (
     <AuthContext.Provider
       value={{
