@@ -4,7 +4,9 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import { createClient } from '@/lib/supabase/client'
 import { getDiscordId, isUserWhitelisted, hasValidTrial } from '@/lib/utils'
 import type { AuthState, AuthUser, AuthSession } from '@/types/auth'
+import type { User } from '@/types/database'
 
+// Define auth context with extended functionality
 const AuthContext = createContext<AuthState & {
   signInWithDiscord: () => Promise<void>
   signOut: () => Promise<void>
@@ -36,12 +38,14 @@ export const useAuth = () => {
   return context
 }
 
+// Configuration constants
 const AUTH_CACHE_KEY = 'auth_cache'
 const AUTH_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 const MAX_RETRY_ATTEMPTS = 3
-const RETRY_DELAY = 1000
+const RETRY_DELAY = 1000 // 1 second
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Enhanced state management
   const [state, setState] = useState<AuthState>({
     user: null,
     session: null,
@@ -50,18 +54,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isTrialActive: false,
   })
   
+  // Additional state for advanced features
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<number | null>(null)
   const [error, setError] = useState<Error | null>(null)
   
+  // Refs for tracking retry attempts and intervals
   const retryAttemptsRef = useRef(0)
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const initialLoadAttemptedRef = useRef(false)
   
   const supabase = createClient()
 
-  // Check user access
-  const checkUserAccess = async (user: AuthUser): Promise<{ hasAccess: boolean; isTrialActive: boolean }> => {
+  // Load cached auth data on initial render
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(AUTH_CACHE_KEY)
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached)
+        const isExpired = Date.now() - timestamp > AUTH_CACHE_TTL
+        
+        if (!isExpired && data.user) {
+          console.log('Using cached auth data')
+          setState({
+            user: data.user,
+            session: data.session,
+            loading: false,
+            hasAccess: data.hasAccess,
+            isTrialActive: data.isTrialActive,
+          })
+          setLastUpdated(timestamp)
+          
+          // Still refresh in background to ensure data is current
+          refreshUserDataInternal(data.session)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading cached auth data:', error)
+      // Continue with normal auth flow if cache fails
+    }
+  }, [])
+
+  // Check user access with retry mechanism
+  const checkUserAccess = async (user: AuthUser, attempt = 1): Promise<{ hasAccess: boolean; isTrialActive: boolean }> => {
     const discordId = getDiscordId(user)
     if (!discordId) return { hasAccess: false, isTrialActive: false }
 
@@ -72,7 +107,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('discord_id', discordId)
         .single()
 
-      if (error) throw error
+      if (error) {
+        if (attempt < MAX_RETRY_ATTEMPTS) {
+          console.warn(`Retry attempt ${attempt} for user access check`)
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt))
+          return checkUserAccess(user, attempt + 1)
+        }
+        throw error
+      }
 
       const isTrialActive = hasValidTrial(data)
       const hasAccess = isUserWhitelisted(data)
@@ -80,89 +122,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { hasAccess, isTrialActive }
     } catch (error) {
       console.error('Error checking user access:', error)
+      setError(error instanceof Error ? error : new Error('Failed to check user access'))
       return { hasAccess: false, isTrialActive: false }
     }
   }
 
-  // Get fresh session from Supabase
-  const getSession = async (skipCache = false) => {
+  // Refresh user data with optimized approach
+  const refreshUserDataInternal = async (session: AuthSession | null = null) => {
+    if (!session && !state.session?.user) return
+    
+    const currentUser = session?.user || state.session?.user
+    if (!currentUser) return
+
+    setIsRefreshing(true)
+    setError(null)
+    
     try {
-      setState(prev => ({ ...prev, loading: true }))
-      setError(null)
+      const { hasAccess, isTrialActive } = await checkUserAccess(currentUser as AuthUser)
       
-      // Skip cache if explicitly requested (e.g., after OAuth)
-      if (!skipCache) {
-        try {
-          const cached = localStorage.getItem(AUTH_CACHE_KEY)
-          if (cached) {
-            const { data, timestamp } = JSON.parse(cached)
-            const isExpired = Date.now() - timestamp > AUTH_CACHE_TTL
-            
-            if (!isExpired && data.user) {
-              console.log('Using cached auth data')
-              setState(data)
-              setLastUpdated(timestamp)
-              setState(prev => ({ ...prev, loading: false }))
-              return
-            }
-          }
-        } catch (error) {
-          console.warn('Error reading auth cache:', error)
-        }
+      const newState = {
+        user: currentUser as AuthUser,
+        session: session || state.session,
+        loading: false,
+        hasAccess,
+        isTrialActive,
       }
-
-      const { data: { session }, error } = await supabase.auth.getSession()
       
-      if (error) throw error
-
-      if (session?.user) {
-        const { hasAccess, isTrialActive } = await checkUserAccess(session.user as AuthUser)
-        
-        const newState = {
-          user: session.user as AuthUser,
-          session: session as AuthSession,
-          loading: false,
-          hasAccess,
-          isTrialActive,
-        }
-        
-        setState(newState)
-        setLastUpdated(Date.now())
-        
-        // Cache the auth data
-        if (!skipCache) {
-          localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
-            data: newState,
-            timestamp: Date.now()
-          }))
-        }
-
-        // Track login
-        const discordId = getDiscordId(session.user)
-        const username = session.user.user_metadata?.full_name || 'Discord User'
-        
-        if (discordId) {
-          await supabase.rpc('upsert_user_login', {
-            target_discord_id: discordId,
-            user_name: username
-          })
-        }
-      } else {
-        setState(prev => ({ ...prev, loading: false }))
-      }
+      setState(newState)
+      setLastUpdated(Date.now())
+      
+      // Cache the updated auth data
+      localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
+        data: newState,
+        timestamp: Date.now()
+      }))
+      
     } catch (error) {
-      console.error('Error in getSession:', error)
-      setState(prev => ({ ...prev, loading: false }))
-      setError(error instanceof Error ? error : new Error('Failed to get session'))
+      console.error('Error refreshing user data:', error)
+      setError(error instanceof Error ? error : new Error('Failed to refresh user data'))
+    } finally {
+      setIsRefreshing(false)
     }
   }
 
   // Public refresh method
-  const refreshUserData = useCallback(async () => {
-    setIsRefreshing(true)
-    await getSession(true) // Skip cache when refreshing
-    setIsRefreshing(false)
-  }, [])
+  const refreshUserData = async () => {
+    await refreshUserDataInternal()
+  }
 
   // Sign in with Discord
   const signInWithDiscord = async () => {
@@ -181,14 +187,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Sign out
+  // Sign out with cleanup
   const signOut = async () => {
     try {
       setError(null)
       const { error } = await supabase.auth.signOut()
       if (error) throw error
       
+      // Clear auth cache
       localStorage.removeItem(AUTH_CACHE_KEY)
+      
+      // Reset state
       setState({
         user: null,
         session: null,
@@ -196,7 +205,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         hasAccess: false,
         isTrialActive: false,
       })
+      
       setLastUpdated(null)
+      
+      // Clear any active intervals
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current)
+        refreshIntervalRef.current = null
+      }
+      
     } catch (error) {
       console.error('Error signing out:', error)
       setError(error instanceof Error ? error : new Error('Failed to sign out'))
@@ -207,13 +224,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (initialLoadAttemptedRef.current) return
     initialLoadAttemptedRef.current = true
+    
+    const getSession = async () => {
+      try {
+        setState(prev => ({ ...prev, loading: true }))
+        setError(null)
+        
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          throw error
+        }
+
+        if (session?.user) {
+          const { hasAccess, isTrialActive } = await checkUserAccess(session.user as AuthUser)
+          
+          const newState = {
+            user: session.user as AuthUser,
+            session: session as AuthSession,
+            loading: false,
+            hasAccess,
+            isTrialActive,
+          }
+          
+          setState(newState)
+          setLastUpdated(Date.now())
+          
+          // Cache the auth data
+          localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
+            data: newState,
+            timestamp: Date.now()
+          }))
+
+          // Track login
+          const discordId = getDiscordId(session.user)
+          const username = session.user.user_metadata?.full_name || 'Discord User'
+          
+          if (discordId) {
+            await supabase.rpc('upsert_user_login', {
+              target_discord_id: discordId,
+              user_name: username
+            })
+          }
+        } else {
+          setState(prev => ({ ...prev, loading: false }))
+        }
+      } catch (error) {
+        console.error('Error in getSession:', error)
+        setState(prev => ({ ...prev, loading: false }))
+        setError(error instanceof Error ? error : new Error('Failed to get session'))
+        
+        // Retry logic
+        if (retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
+          retryAttemptsRef.current++
+          setTimeout(getSession, RETRY_DELAY * retryAttemptsRef.current)
+        }
+      }
+    }
+
     getSession()
 
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state change:', event, session?.user?.id)
-        
         if (event === 'SIGNED_IN' && session?.user) {
           const { hasAccess, isTrialActive } = await checkUserAccess(session.user as AuthUser)
           
@@ -228,12 +301,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setState(newState)
           setLastUpdated(Date.now())
           
+          // Cache the auth data
           localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
             data: newState,
             timestamp: Date.now()
           }))
+          
+          // Set up periodic refresh
+          if (refreshIntervalRef.current) {
+            clearInterval(refreshIntervalRef.current)
+          }
+          
+          refreshIntervalRef.current = setInterval(() => {
+            refreshUserDataInternal()
+          }, AUTH_CACHE_TTL)
+          
         } else if (event === 'SIGNED_OUT') {
+          // Clear auth cache
           localStorage.removeItem(AUTH_CACHE_KEY)
+          
           setState({
             user: null,
             session: null,
@@ -241,25 +327,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             hasAccess: false,
             isTrialActive: false,
           })
+          
           setLastUpdated(null)
+          
+          // Clear refresh interval
+          if (refreshIntervalRef.current) {
+            clearInterval(refreshIntervalRef.current)
+            refreshIntervalRef.current = null
+          }
         }
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current)
+      }
+    }
   }, [])
 
+  // Set up real-time subscription for user access changes
+  useEffect(() => {
+    if (!state.user) return
+
+    const discordId = getDiscordId(state.user)
+    if (!discordId) return
+
+    const channel = supabase
+      .channel('user-access-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'users',
+          filter: `discord_id=eq.${discordId}`
+        },
+        async () => {
+          await refreshUserDataInternal()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [state.user])
+
   return (
-    <AuthContext.Provider value={{
-      ...state,
-      signInWithDiscord,
-      signOut,
-      refreshUserData,
-      isLoading: state.loading,
-      isRefreshing,
-      lastUpdated,
-      error,
-    }}>
+    <AuthContext.Provider
+      value={{
+        ...state,
+        signInWithDiscord,
+        signOut,
+        refreshUserData,
+        isLoading: state.loading,
+        isRefreshing,
+        lastUpdated,
+        error,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
