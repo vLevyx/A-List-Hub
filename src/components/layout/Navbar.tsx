@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/hooks/useAuth";
-import { getAvatarUrl, getUsername } from "@/lib/utils";
+import { getAvatarUrl, getUsername, isUserMiddleman } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { ChevronDown, LogOut, User, Settings, Shield } from "lucide-react";
@@ -101,8 +101,8 @@ export function Navbar() {
   // Remove the loading state return - let navbar render immediately
   // This prevents the blocking loading state mentioned in the optimization
 
-  //Temporary
-  const isMiddleman = false;
+  //Check if user is a middleman
+  const isMiddleman = isUserMiddleman(user);
 
   return (
     <nav className="backdrop-blur-md bg-background-secondary/60 border-b border-white/5 sticky top-0 z-50">
