@@ -323,7 +323,7 @@ export default function ProfilePage() {
 
   // Load user profile and blueprints data using the RPC function
   const loadUserData = useCallback(
-    async (forceRefresh = true) => {
+    async (forceRefresh = false) => {
       if (!user) return;
 
       try {
