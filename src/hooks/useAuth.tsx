@@ -468,11 +468,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         ...state,
-        loading: state.loading && !state.user,
         signInWithDiscord,
         signOut,
         refreshUserData,
-        isLoading: state.loading && !state.user,
+        isLoading: state.loading,
         isRefreshing,
         lastUpdated,
         error,
