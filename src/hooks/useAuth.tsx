@@ -309,18 +309,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               timestamp: Date.now(),
             })
           );
-
-          // Track login
-          // const discordId = getDiscordId(session.user);
-          // const username =
-          //   session.user.user_metadata?.full_name || "Discord User";
-
-          // if (discordId) {
-          //   await supabase.rpc("upsert_user_login", {
-          //     target_discord_id: discordId,
-          //     user_name: username,
-          //   });
-          // }
         } else {
           setState((prev) => ({ ...prev, loading: false }));
         }
@@ -335,6 +323,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
           retryAttemptsRef.current++;
           setTimeout(getSession, RETRY_DELAY * retryAttemptsRef.current);
+        } else {
+          // After max retries, ensure loading is set to false
+          setState((prev) => ({ ...prev, loading: false }));
+          console.error(
+            "Max retry attempts reached in getSession. Stopping further retries and setting loading to false."
+          );
         }
       }
     };
@@ -474,4 +468,3 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     </AuthContext.Provider>
   );
 }
-
