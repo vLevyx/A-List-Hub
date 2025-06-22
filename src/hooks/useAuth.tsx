@@ -39,8 +39,8 @@ export const useAuth = () => {
 }
 
 // Configuration constants
-const AUTH_CACHE_KEY = 'auth_cache'
-const AUTH_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const AUTH_CACHE_KEY = 'auth_cache_v2'
+const AUTH_CACHE_TTL = 10 * 60 * 1000 // 10 minutes (increased from 5)
 const MAX_RETRY_ATTEMPTS = 3
 const RETRY_DELAY = 1000 // 1 second
 
@@ -63,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const retryAttemptsRef = useRef(0)
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const initialLoadAttemptedRef = useRef(false)
+  const authChangeListenerRef = useRef<any>(null)
   
   const supabase = createClient()
 
@@ -74,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data, timestamp } = JSON.parse(cached)
         const isExpired = Date.now() - timestamp > AUTH_CACHE_TTL
         
-        if (!isExpired && data.user) {
+        if (!isExpired && data.user && data.session) {
           console.log('Using cached auth data')
           setState({
             user: data.user,
@@ -85,13 +86,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           })
           setLastUpdated(timestamp)
           
-          // Still refresh in background to ensure data is current
-          refreshUserDataInternal(data.session)
+          // Verify session is still valid in background
+          setTimeout(() => refreshUserDataInternal(data.session), 100)
+        } else {
+          // Clear expired cache
+          localStorage.removeItem(AUTH_CACHE_KEY)
         }
       }
     } catch (error) {
       console.error('Error loading cached auth data:', error)
-      // Continue with normal auth flow if cache fails
+      localStorage.removeItem(AUTH_CACHE_KEY)
     }
   }, [])
 
@@ -129,20 +133,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Refresh user data with optimized approach
   const refreshUserDataInternal = async (session: AuthSession | null = null) => {
-    if (!session && !state.session?.user) return
+    const currentSession = session || state.session
+    if (!currentSession?.user) return
     
-    const currentUser = session?.user || state.session?.user
-    if (!currentUser) return
-
     setIsRefreshing(true)
     setError(null)
     
     try {
-      const { hasAccess, isTrialActive } = await checkUserAccess(currentUser as AuthUser)
+      // First verify the session is still valid
+      const { data: { session: validSession }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !validSession) {
+        console.warn('Session invalid, clearing auth state')
+        await signOut()
+        return
+      }
+      
+      const { hasAccess, isTrialActive } = await checkUserAccess(validSession.user as AuthUser)
       
       const newState = {
-        user: currentUser as AuthUser,
-        session: session || state.session,
+        user: validSession.user as AuthUser,
+        session: validSession as AuthSession,
         loading: false,
         hasAccess,
         isTrialActive,
@@ -151,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState(newState)
       setLastUpdated(Date.now())
       
-      // Cache the updated auth data
+      // Cache the updated auth data with longer TTL
       localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
         data: newState,
         timestamp: Date.now()
@@ -284,9 +295,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     getSession()
 
-    // Set up auth state change listener
+    // Set up auth state change listener with improved error handling
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state change:', event)
+        
         if (event === 'SIGNED_IN' && session?.user) {
           const { hasAccess, isTrialActive } = await checkUserAccess(session.user as AuthUser)
           
@@ -307,19 +320,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             timestamp: Date.now()
           }))
           
-          // Set up periodic refresh
-          if (refreshIntervalRef.current) {
-            clearInterval(refreshIntervalRef.current)
-          }
-          
-          refreshIntervalRef.current = setInterval(() => {
-            refreshUserDataInternal()
-          }, AUTH_CACHE_TTL)
-          
         } else if (event === 'SIGNED_OUT') {
-          // Clear auth cache
           localStorage.removeItem(AUTH_CACHE_KEY)
-          
           setState({
             user: null,
             session: null,
@@ -327,68 +329,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             hasAccess: false,
             isTrialActive: false,
           })
-          
           setLastUpdated(null)
+        } else if (event === 'TOKEN_REFRESHED' && session) {
+          // Update session after token refresh
+          setState(prev => ({
+            ...prev,
+            session: session as AuthSession
+          }))
           
-          // Clear refresh interval
-          if (refreshIntervalRef.current) {
-            clearInterval(refreshIntervalRef.current)
-            refreshIntervalRef.current = null
+          // Update cache
+          const cached = localStorage.getItem(AUTH_CACHE_KEY)
+          if (cached) {
+            const { data } = JSON.parse(cached)
+            localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
+              data: { ...data, session: session as AuthSession },
+              timestamp: Date.now()
+            }))
           }
         }
       }
     )
+    
+    authChangeListenerRef.current = subscription
 
     return () => {
-      subscription.unsubscribe()
+      if (authChangeListenerRef.current) {
+        authChangeListenerRef.current.unsubscribe()
+      }
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current)
       }
     }
   }, [])
 
-  // Set up real-time subscription for user access changes
+  // Set up periodic refresh for active sessions
   useEffect(() => {
-    if (!state.user) return
-
-    const discordId = getDiscordId(state.user)
-    if (!discordId) return
-
-    const channel = supabase
-      .channel('user-access-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'users',
-          filter: `discord_id=eq.${discordId}`
-        },
-        async () => {
-          await refreshUserDataInternal()
-        }
-      )
-      .subscribe()
+    if (state.session && !refreshIntervalRef.current) {
+      refreshIntervalRef.current = setInterval(() => {
+        refreshUserDataInternal()
+      }, 5 * 60 * 1000) // Refresh every 5 minutes
+    } else if (!state.session && refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current)
+      refreshIntervalRef.current = null
+    }
 
     return () => {
-      supabase.removeChannel(channel)
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current)
+        refreshIntervalRef.current = null
+      }
     }
-  }, [state.user])
+  }, [state.session])
 
-  return (
-    <AuthContext.Provider
-      value={{
-        ...state,
-        signInWithDiscord,
-        signOut,
-        refreshUserData,
-        isLoading: state.loading,
-        isRefreshing,
-        lastUpdated,
-        error,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  )
+  const value = {
+    ...state,
+    signInWithDiscord,
+    signOut,
+    refreshUserData,
+    isLoading: state.loading,
+    isRefreshing,
+    lastUpdated,
+    error,
+  }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
