@@ -345,9 +345,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    if (typeof window !== "undefined") {
-      getSession();
-    }
+    getSession();
 
     // Set up auth state change listener
     const {
@@ -356,8 +354,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (event === "SIGNED_IN" && session?.user) {
         // Track login
         const discordId = getDiscordId(session.user);
-        const username =
-          session.user.user_metadata?.full_name || "Discord User";
+        const username = session.user.user_metadata?.full_name;
 
         if (discordId) {
           await supabase.rpc("upsert_user_login", {
@@ -381,13 +378,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setState(newState);
         setLastUpdated(Date.now());
 
-        //Silently refresh or reload screen since nextjs uses soft navigations
-        if (router) {
-          router.refresh();
-        } else {
-          window.location.reload();
-        }
-
         // Cache the auth data
         localStorage.setItem(
           AUTH_CACHE_KEY,
@@ -397,14 +387,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           })
         );
 
-        // Set up periodic refresh
-        if (refreshIntervalRef.current) {
-          clearInterval(refreshIntervalRef.current);
+        //Silently refresh or reload screen since nextjs uses soft navigations
+        if (router) {
+          router.refresh();
+        } else {
+          window.location.reload();
         }
 
-        refreshIntervalRef.current = setInterval(() => {
-          refreshUserDataInternal();
-        }, AUTH_CACHE_TTL);
+        // Set up periodic refresh
+        // if (refreshIntervalRef.current) {
+        //   clearInterval(refreshIntervalRef.current);
+        // }
+
+        // refreshIntervalRef.current = setInterval(() => {
+        //   refreshUserDataInternal();
+        // }, AUTH_CACHE_TTL);
       } else if (event === "SIGNED_OUT") {
         // Clear auth cache
         localStorage.removeItem(AUTH_CACHE_KEY);
