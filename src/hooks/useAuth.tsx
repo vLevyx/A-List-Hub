@@ -13,6 +13,7 @@ import { getDiscordId, isUserWhitelisted, hasValidTrial } from "@/lib/utils";
 import type { AuthState, AuthUser, AuthSession } from "@/types/auth";
 import type { User } from "@/types/database";
 import { useRouter } from "next/navigation";
+import { withTimeout } from "@/lib/timeout";
 
 // Define auth context with extended functionality
 const AuthContext = createContext<
@@ -118,11 +119,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!discordId) return { hasAccess: false, isTrialActive: false };
 
     try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("revoked, hub_trial, trial_expiration")
-        .eq("discord_id", discordId)
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from("users")
+          .select("revoked, hub_trial, trial_expiration")
+          .eq("discord_id", discordId)
+          .single()
+      );
 
       if (error) {
         if (attempt < MAX_RETRY_ATTEMPTS) {
@@ -207,12 +210,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithDiscord = async () => {
     try {
       setError(null);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "discord",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
+      const { error } = await withTimeout(
+        supabase.auth.signInWithOAuth({
+          provider: "discord",
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback`,
+          },
+        })
+      );
       if (error) throw error;
     } catch (error) {
       console.error("Error signing in with Discord:", error);
@@ -228,7 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       setError(null);
-      const { error } = await supabase.auth.signOut();
+      const { error } = await withTimeout(supabase.auth.signOut());
       if (error) throw error;
 
       // Clear auth cache
@@ -288,7 +293,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const {
           data: { session },
           error,
-        } = await supabase.auth.getSession();
+        } = await withTimeout(supabase.auth.getSession());
 
         if (error) {
           throw error;
@@ -374,10 +379,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           session.user.user_metadata?.full_name || "Discord User";
 
         if (discordId) {
-          await supabase.rpc("upsert_user_login", {
-            target_discord_id: discordId,
-            user_name: username,
-          });
+          await withTimeout(
+            supabase.rpc("upsert_user_login", {
+              target_discord_id: discordId,
+              user_name: username,
+            })
+          );
         }
 
         //Silently refresh or reload screen since nextjs uses soft navigations
