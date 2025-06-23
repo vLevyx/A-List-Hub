@@ -345,9 +345,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    if (typeof window !== "undefined") {
-      getSession();
-    }
+    getSession();
 
     // Set up auth state change listener
     const {
@@ -381,13 +379,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setState(newState);
         setLastUpdated(Date.now());
 
-        //Silently refresh or reload screen since nextjs uses soft navigations
-        if (router) {
-          router.refresh();
-        } else {
-          window.location.reload();
-        }
-
         // Cache the auth data
         localStorage.setItem(
           AUTH_CACHE_KEY,
@@ -396,6 +387,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             timestamp: Date.now(),
           })
         );
+
+        //Silently refresh or reload screen since nextjs uses soft navigations
+        if (router) {
+          router.refresh();
+        } else {
+          window.location.reload();
+        }
 
         // Set up periodic refresh
         if (refreshIntervalRef.current) {
