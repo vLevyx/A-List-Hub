@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { createClient } from "@/lib/supabase/client";
+import { withTimeout } from "@/lib/timeout";
 import {
   getDiscordId,
   getUsername,
@@ -384,9 +385,10 @@ export default function ProfilePage() {
         }
 
         // Use the RPC function to get both profile and blueprints in one call
-        const { data, error } = await supabase.rpc(
-          "get_profile_and_blueprints",
-          { user_discord_id: discordId }
+        const { data, error } = await withTimeout(
+          supabase.rpc("get_profile_and_blueprints", {
+            user_discord_id: discordId,
+          })
         );
 
         if (error) {
@@ -497,11 +499,9 @@ export default function ProfilePage() {
       }
 
       // Load profile
-      const { data: profileData, error: profileError } = await supabase
-        .from("users")
-        .select("*")
-        .eq("discord_id", discordId)
-        .single();
+      const { data: profileData, error: profileError } = await withTimeout(
+        supabase.from("users").select("*").eq("discord_id", discordId).single()
+      );
 
       if (profileError && profileError.code !== "PGRST116") {
         console.error("Error fetching user profile:", profileError);
@@ -525,10 +525,13 @@ export default function ProfilePage() {
       setLoadingState((prev) => ({ ...prev, profile: false }));
 
       // Load blueprints
-      const { data: blueprintsData, error: blueprintsError } = await supabase
-        .from("user_blueprints")
-        .select("*")
-        .eq("discord_id", discordId);
+      const { data: blueprintsData, error: blueprintsError } =
+        await withTimeout(
+          supabase
+            .from("user_blueprints")
+            .select("*")
+            .eq("discord_id", discordId)
+        );
 
       if (blueprintsError) {
         console.error("Error fetching blueprints:", blueprintsError);
@@ -648,10 +651,9 @@ export default function ProfilePage() {
       setOwnedBlueprints(blueprintsToSave);
 
       // Delete existing blueprints
-      const { error: deleteError } = await supabase
-        .from("user_blueprints")
-        .delete()
-        .eq("discord_id", discordId);
+      const { error: deleteError } = await withTimeout(
+        supabase.from("user_blueprints").delete().eq("discord_id", discordId)
+      );
 
       if (deleteError) {
         console.error("Error deleting existing blueprints:", deleteError);
@@ -665,9 +667,9 @@ export default function ProfilePage() {
           blueprint_name: name,
         }));
 
-        const { error: insertError } = await supabase
-          .from("user_blueprints")
-          .insert(inserts);
+        const { error: insertError } = await withTimeout(
+          supabase.from("user_blueprints").insert(inserts)
+        );
 
         if (insertError) {
           console.error("Error inserting blueprints:", insertError);
