@@ -50,7 +50,7 @@ export const useAuth = () => {
 
 // Configuration constants
 const AUTH_CACHE_KEY = "auth_cache";
-const AUTH_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const AUTH_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY = 1000; // 1 second
 
@@ -195,6 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
     } finally {
       setIsRefreshing(false);
+      setState((prev) => ({ ...prev, loading: false }));
     }
   };
 
