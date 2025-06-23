@@ -272,12 +272,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
-    if (initialLoadAttemptedRef.current) {
-      setState((prev) => ({ ...prev, loading: false }));
-      return;
-    }
+    // if (initialLoadAttemptedRef.current) {
+    //   setState((prev) => ({ ...prev, loading: false }));
+    //   return;
+    // }
 
-    initialLoadAttemptedRef.current = true;
+    // initialLoadAttemptedRef.current = true;
 
     const getSession = async () => {
       console.log("called");
@@ -309,18 +309,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           setState(newState);
           setLastUpdated(Date.now());
-
-          // Track login
-          const discordId = getDiscordId(session.user);
-          const username =
-            session.user.user_metadata?.full_name || "Discord User";
-
-          if (discordId) {
-            await supabase.rpc("upsert_user_login", {
-              target_discord_id: discordId,
-              user_name: username,
-            });
-          }
 
           // Cache the auth data
           localStorage.setItem(
@@ -365,6 +353,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_IN" && session?.user) {
+        // Track login
+        const discordId = getDiscordId(session.user);
+        const username =
+          session.user.user_metadata?.full_name || "Discord User";
+
+        if (discordId) {
+          await supabase.rpc("upsert_user_login", {
+            target_discord_id: discordId,
+            user_name: username,
+          });
+        }
+
         const { hasAccess, isTrialActive } = await checkUserAccess(
           session.user as AuthUser
         );
