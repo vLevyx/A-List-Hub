@@ -281,8 +281,8 @@ export default function ProfilePage() {
     new Set()
   );
   const [loadingState, setLoadingState] = useState<LoadingState>({
-    profile: true,
-    blueprints: true,
+    profile: false,
+    blueprints: false,
     saving: false,
   });
   const [errorState, setErrorState] = useState<ErrorState>({
@@ -325,6 +325,12 @@ export default function ProfilePage() {
   const loadUserData = useCallback(
     async (forceRefresh = false) => {
       if (!user) return;
+
+      setLoadingState((prev) => ({
+        ...prev,
+        profile: true,
+        blueprints: true,
+      }));
 
       try {
         const discordId = getDiscordId(user);
@@ -458,6 +464,7 @@ export default function ProfilePage() {
           profile: "An unexpected error occurred",
           blueprints: "An unexpected error occurred",
         }));
+      } finally {
         setLoadingState((prev) => ({
           ...prev,
           profile: false,
@@ -471,6 +478,8 @@ export default function ProfilePage() {
   // Fallback method if RPC fails
   const loadDataSeparately = useCallback(async () => {
     if (!user) return;
+
+    setLoadingState((prev) => ({ ...prev, profile: true, blueprints: true }));
 
     try {
       const discordId = getDiscordId(user);
@@ -552,6 +561,7 @@ export default function ProfilePage() {
         profile: prev.profile || "An unexpected error occurred",
         blueprints: prev.blueprints || "An unexpected error occurred",
       }));
+    } finally {
       setLoadingState((prev) => ({
         ...prev,
         profile: false,

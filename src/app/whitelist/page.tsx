@@ -44,11 +44,13 @@ export default function WhitelistPage() {
   // User status state
   const [userData, setUserData] = useState<any>(null);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Load user data
   useEffect(() => {
     const fetchUserData = async () => {
+      setIsLoading(true);
+
       if (!user) {
         setUserStatus({
           type: "not_logged_in",
