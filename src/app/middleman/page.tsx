@@ -11,6 +11,7 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { Button } from "@/components/ui/Button";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import { ScamListModal } from "../../components/ScamListModal";
+import { withTimeout } from "@/lib/timeout";
 
 // Constants
 const RATE_LIMIT_MINUTES = 60;
@@ -133,19 +134,21 @@ export default function MiddlemanMarketPage(): ReactElement {
     []
   );
 
-  // Fetch only this user’s requests
+  // Fetch only this user's requests
   const loadRequestHistory = async () => {
     if (!user) return;
 
     setIsLoadingHistory(true);
     try {
       const discordId = getDiscordId(user);
-      const { data, error } = await supabase
-        .from("middleman_requests")
-        .select("*")
-        .eq("user_discord_id", discordId)
-        .order("created_at", { ascending: false })
-        .limit(5);
+      const { data, error } = await withTimeout(
+        supabase
+          .from("middleman_requests")
+          .select("*")
+          .eq("user_discord_id", discordId)
+          .order("created_at", { ascending: false })
+          .limit(5)
+      );
       if (error) throw error;
       setRequestHistory(data as RequestHistory[]);
     } catch (err) {
@@ -159,11 +162,13 @@ export default function MiddlemanMarketPage(): ReactElement {
   const loadScamList = async () => {
     setIsLoadingScamList(true);
     try {
-      const { data, error } = await supabase
-        .from("scam_list")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(10);
+      const { data, error } = await withTimeout(
+        supabase
+          .from("scam_list")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(10)
+      );
       if (error) throw error;
       setScamList(data as Scammer[]);
     } catch (err) {
@@ -247,19 +252,20 @@ export default function MiddlemanMarketPage(): ReactElement {
 
     try {
       const discordId = getDiscordId(user);
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession()
+      );
       const token = sessionData.session?.access_token || "";
 
-      const { data: result, error } = await supabase.functions.invoke(
-        "send-middleman-request",
-        {
+      const { data: result, error } = await withTimeout(
+        supabase.functions.invoke("send-middleman-request", {
           body: {
             ...formData,
             discordId,
             timestamp: new Date().toISOString(),
           },
           headers: { Authorization: `Bearer ${token}` },
-        }
+        })
       );
       if (error) throw error;
       if (!(result as any).success) throw new Error((result as any).error);
@@ -295,17 +301,18 @@ export default function MiddlemanMarketPage(): ReactElement {
     }
   };
 
-  // Cancel a user’s own request
+  // Cancel a user's own request
   const cancelRequest = async (requestId: string) => {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession()
+      );
       const token = sessionData.session?.access_token || "";
-      const { data: result, error } = await supabase.functions.invoke(
-        "update-request-status",
-        {
+      const { data: result, error } = await withTimeout(
+        supabase.functions.invoke("update-request-status", {
           body: { requestId, newStatus: "cancelled" },
           headers: { Authorization: `Bearer ${token}` },
-        }
+        })
       );
       if (error) throw error;
       if (!(result as any).success) throw new Error((result as any).error);

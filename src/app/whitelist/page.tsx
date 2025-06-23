@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { createClient } from "@/lib/supabase/client";
 import { getDiscordId } from "@/lib/utils";
+import { withTimeout } from "@/lib/timeout";
 
 // Configuration
 const DISCOUNT_ENABLED = false;
@@ -72,11 +73,13 @@ export default function WhitelistPage() {
           return;
         }
 
-        const { data, error } = await supabase
-          .from("users")
-          .select("hub_trial, revoked, trial_expiration")
-          .eq("discord_id", discordId)
-          .single();
+        const { data, error } = await withTimeout(
+          supabase
+            .from("users")
+            .select("hub_trial, revoked, trial_expiration")
+            .eq("discord_id", discordId)
+            .single()
+        );
 
         if (error && error.code !== "PGRST116") {
           console.error("Error fetching user data:", error);
@@ -187,26 +190,29 @@ export default function WhitelistPage() {
       const trialEnds =
         Math.floor(Date.now() / 1000) + TRIAL_DAYS * 24 * 60 * 60;
 
-      const response = await fetch(
-        "https://dsexkdjxmhgqahrlkvax.functions.supabase.co/sendDiscordWebhook",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${
-              (
-                await supabase.auth.getSession()
-              ).data.session?.access_token
-            }`,
-          },
-          body: JSON.stringify({
-            ign,
-            discordId,
-            discordUsername,
-            trialEnds,
-            referral: referral.trim(),
-          }),
-        }
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession()
+      );
+      const token = sessionData.session?.access_token;
+
+      const response = await withTimeout(
+        fetch(
+          "https://dsexkdjxmhgqahrlkvax.functions.supabase.co/sendDiscordWebhook",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              discordId,
+              discordUsername,
+              ign,
+              referral: referral.trim() || "None",
+              trialEnds,
+            }),
+          }
+        )
       );
 
       if (!response.ok) {

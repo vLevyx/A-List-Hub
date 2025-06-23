@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getDiscordId, formatDate, timeAgo } from "@/lib/utils";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { Button } from "@/components/ui/Button";
+import { withTimeout } from "@/lib/timeout";
 
 // Admin IDs that have access
 const ADMIN_DISCORD_IDS = [
@@ -175,7 +176,7 @@ export default function AdminPage() {
         }
 
         // Get count first
-        const { count, error: countError } = await query;
+        const { count, error: countError } = await withTimeout(query);
 
         if (countError) {
           console.error("Error getting user count:", countError);
@@ -185,9 +186,11 @@ export default function AdminPage() {
         setUserCount(count || 0);
 
         // Then get paginated data
-        const { data, error } = await query
-          .order("last_login", { ascending: false, nullsFirst: false })
-          .range(page * limit, page * limit + limit - 1);
+        const { data, error } = await withTimeout(
+          query
+            .order("last_login", { ascending: false, nullsFirst: false })
+            .range(page * limit, page * limit + limit - 1)
+        );
 
         if (error) {
           console.error("Error loading users:", error);
@@ -221,11 +224,7 @@ export default function AdminPage() {
 
   // Load logs with pagination and filtering
   const loadLogs = useCallback(
-    async (
-      page = 0,
-      limit = 15,
-      filters = { admin: "", action: "", target: "" }
-    ) => {
+    async (page = 0, limit = 15, filters = logFilters) => {
       setLoadingState((prev) => ({ ...prev, logs: true }));
 
       try {
@@ -235,17 +234,15 @@ export default function AdminPage() {
         if (filters.admin) {
           query = query.ilike("admin_name", `%${filters.admin}%`);
         }
-
         if (filters.action) {
           query = query.ilike("action", `%${filters.action}%`);
         }
-
         if (filters.target) {
           query = query.ilike("target_discord_id", `%${filters.target}%`);
         }
 
         // Get count first
-        const { count, error: countError } = await query;
+        const { count, error: countError } = await withTimeout(query);
 
         if (countError) {
           console.error("Error getting log count:", countError);
@@ -255,9 +252,11 @@ export default function AdminPage() {
         setLogCount(count || 0);
 
         // Then get paginated data
-        const { data, error } = await query
-          .order("created_at", { ascending: false })
-          .range(page * limit, page * limit + limit - 1);
+        const { data, error } = await withTimeout(
+          query
+            .order("created_at", { ascending: false })
+            .range(page * limit, page * limit + limit - 1)
+        );
 
         if (error) {
           console.error("Error loading logs:", error);
@@ -271,7 +270,7 @@ export default function AdminPage() {
         setLoadingState((prev) => ({ ...prev, logs: false }));
       }
     },
-    [supabase]
+    [supabase, logFilters]
   );
 
   // Load analytics data
@@ -280,73 +279,40 @@ export default function AdminPage() {
 
     try {
       // Get page analytics
-      const { data: pageData, error: pageError } = await supabase
-        .from("page_sessions")
-        .select("page_path, time_spent_seconds, username")
-        .not("time_spent_seconds", "is", null);
+      const { data: pageData, error: pageError } = await withTimeout(
+        supabase.rpc("get_page_analytics")
+      );
 
       if (pageError) {
         console.error("Error loading page analytics:", pageError);
         return;
       }
 
-      // Process page data
-      const pageMap = new Map<string, { time: number; sessions: number }>();
+      setPageAnalytics(pageData || []);
 
-      pageData?.forEach((session) => {
-        const path = session.page_path;
-        const time = session.time_spent_seconds || 0;
-
-        if (!pageMap.has(path)) {
-          pageMap.set(path, { time: 0, sessions: 0 });
-        }
-
-        const entry = pageMap.get(path)!;
-        entry.time += time;
-        entry.sessions += 1;
-      });
-
-      // Convert to array and sort by time spent
-      const pageAnalytics = Array.from(pageMap.entries()).map(
-        ([page_path, data]) => ({
-          page_path,
-          total_time: data.time,
-          sessions: data.sessions,
-        })
+      // Get top users
+      const { data: userData, error: userError } = await withTimeout(
+        supabase.rpc("get_top_users")
       );
 
-      pageAnalytics.sort((a, b) => b.total_time - a.total_time);
-      setPageAnalytics(pageAnalytics);
+      if (userError) {
+        console.error("Error loading top users:", userError);
+        return;
+      }
 
-      // Process user data
-      const userMap = new Map<
-        string,
-        { time_spent: number; sessions: number }
-      >();
+      setTopUsers(userData || []);
 
-      pageData?.forEach((session) => {
-        if (!session.username) return;
-
-        if (!userMap.has(session.username)) {
-          userMap.set(session.username, { time_spent: 0, sessions: 0 });
-        }
-
-        const entry = userMap.get(session.username)!;
-        entry.time_spent += session.time_spent_seconds || 0;
-        entry.sessions += 1;
-      });
-
-      // Convert to array and sort by time spent
-      const topUsers = Array.from(userMap.entries()).map(
-        ([username, data]) => ({
-          username,
-          time_spent: data.time_spent,
-          sessions: data.sessions,
-        })
+      // Get online users
+      const { data: onlineData, error: onlineError } = await withTimeout(
+        supabase.rpc("get_online_users")
       );
 
-      topUsers.sort((a, b) => b.time_spent - a.time_spent);
-      setTopUsers(topUsers.slice(0, 10)); // Top 10 users
+      if (onlineError) {
+        console.error("Error loading online users:", onlineError);
+        return;
+      }
+
+      setOnlineUsers(new Set(onlineData.map((user: any) => user.discord_id)));
     } catch (error) {
       console.error("Failed to load analytics:", error);
     } finally {
@@ -360,11 +326,13 @@ export default function AdminPage() {
       if (!username) return;
 
       try {
-        const { data, error } = await supabase
-          .from("page_sessions")
-          .select("page_path, time_spent_seconds")
-          .eq("username", username)
-          .not("time_spent_seconds", "is", null);
+        const { data, error } = await withTimeout(
+          supabase
+            .from("page_sessions")
+            .select("page_path, time_spent_seconds")
+            .eq("username", username)
+            .not("time_spent_seconds", "is", null)
+        );
 
         if (error) {
           console.error("Error loading user page analytics:", error);
@@ -410,17 +378,21 @@ export default function AdminPage() {
   const loadUserBlueprints = useCallback(
     async (discordId: string) => {
       try {
-        const { data, error } = await supabase
-          .from("user_blueprints")
-          .select("blueprint_name")
-          .eq("discord_id", discordId);
+        const { data, error } = await withTimeout(
+          supabase
+            .from("user_blueprints")
+            .select("blueprint_name")
+            .eq("discord_id", discordId)
+        );
 
-        if (error) throw error;
+        if (error) {
+          console.error("Error loading user blueprints:", error);
+          return;
+        }
 
         setUserBlueprints(data?.map((bp) => bp.blueprint_name) || []);
       } catch (error) {
-        console.error("Error loading blueprints:", error);
-        setUserBlueprints([]);
+        console.error("Failed to load user blueprints:", error);
       }
     },
     [supabase]
@@ -697,15 +669,17 @@ export default function AdminPage() {
       }
 
       // Create log entry
-      const { error: logError } = await supabase.from("admin_logs").insert([
-        {
-          admin_id: adminId,
-          admin_name: adminName,
-          action,
-          target_discord_id: userId,
-          description,
-        },
-      ]);
+      const { error: logError } = await withTimeout(
+        supabase.from("admin_logs").insert([
+          {
+            admin_id: adminId,
+            admin_name: adminName,
+            action,
+            target_discord_id: userId,
+            description,
+          },
+        ])
+      );
 
       if (logError) {
         throw logError;
@@ -713,7 +687,9 @@ export default function AdminPage() {
 
       // Perform the action via RPC if needed
       if (rpcFunction) {
-        const { error: rpcError } = await supabase.rpc(rpcFunction, rpcParams);
+        const { error: rpcError } = await withTimeout(
+          supabase.rpc(rpcFunction, rpcParams)
+        );
 
         if (rpcError) {
           throw rpcError;
@@ -734,11 +710,9 @@ export default function AdminPage() {
       // **NEW: Auto-refresh the selected user data in the side panel**
       if (selectedUser && selectedUser.discord_id === userId) {
         // Fetch updated user data
-        const { data: updatedUserData, error: userError } = await supabase
-          .from("users")
-          .select("*")
-          .eq("discord_id", userId)
-          .single();
+        const { data: updatedUserData, error: userError } = await withTimeout(
+          supabase.from("users").select("*").eq("discord_id", userId).single()
+        );
 
         if (!userError && updatedUserData) {
           setSelectedUser(updatedUserData);
@@ -824,28 +798,29 @@ export default function AdminPage() {
           throw new Error("Invalid action");
       }
 
-      // Update users
-      const { error: updateError } = await supabase
-        .from("users")
-        .update(updateData)
-        .in("discord_id", userIds);
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      // Create log entry
-      const { error: logError } = await supabase.from("admin_logs").insert([
-        {
-          admin_id: adminId,
-          admin_name: adminName,
-          action: `BULK_${action}`,
-          description,
-        },
-      ]);
+      // Create log entry for bulk action
+      const { error: logError } = await withTimeout(
+        supabase.from("admin_logs").insert([
+          {
+            admin_id: adminId,
+            admin_name: adminName,
+            action: `BULK_${action}`,
+            description,
+          },
+        ])
+      );
 
       if (logError) {
         throw logError;
+      }
+
+      // Perform bulk update
+      const { error: updateError } = await withTimeout(
+        supabase.from("users").update(updateData).in("discord_id", userIds)
+      );
+
+      if (updateError) {
+        throw updateError;
       }
 
       // Show success message
