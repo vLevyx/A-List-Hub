@@ -354,8 +354,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (event === "SIGNED_IN" && session?.user) {
         // Track login
         const discordId = getDiscordId(session.user);
-        const username =
-          session.user.user_metadata?.full_name || "Discord User";
+        const username = session.user.user_metadata?.full_name;
 
         if (discordId) {
           await supabase.rpc("upsert_user_login", {
@@ -396,13 +395,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         // Set up periodic refresh
-        if (refreshIntervalRef.current) {
-          clearInterval(refreshIntervalRef.current);
-        }
+        // if (refreshIntervalRef.current) {
+        //   clearInterval(refreshIntervalRef.current);
+        // }
 
-        refreshIntervalRef.current = setInterval(() => {
-          refreshUserDataInternal();
-        }, AUTH_CACHE_TTL);
+        // refreshIntervalRef.current = setInterval(() => {
+        //   refreshUserDataInternal();
+        // }, AUTH_CACHE_TTL);
       } else if (event === "SIGNED_OUT") {
         // Clear auth cache
         localStorage.removeItem(AUTH_CACHE_KEY);
