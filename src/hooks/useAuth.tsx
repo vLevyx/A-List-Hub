@@ -104,6 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Error loading cached auth data:", error);
       // Continue with normal auth flow if cache fails
+    } finally {
+      setState((prev) => ({ ...prev, loading: false }));
     }
   }, []);
 
@@ -263,19 +265,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setError(
         error instanceof Error ? error : new Error("Failed to sign out")
       );
+    } finally {
+      setState((prev) => ({ ...prev, loading: false }));
     }
   };
 
   // Initialize auth state
   useEffect(() => {
-    if (initialLoadAttemptedRef.current) {
-      setState((prev) => ({ ...prev, loading: false }));
-      return;
-    }
+    // if (initialLoadAttemptedRef.current) {
+    //   setState((prev) => ({ ...prev, loading: false }));
+    //   return;
+    // }
 
-    initialLoadAttemptedRef.current = true;
+    // initialLoadAttemptedRef.current = true;
 
     const getSession = async () => {
+      console.log("called");
       try {
         setState((prev) => ({ ...prev, loading: true }));
         setError(null);
@@ -334,6 +339,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             "Max retry attempts reached in getSession. Stopping further retries and setting loading to false."
           );
         }
+      } finally {
+        setState((prev) => ({ ...prev, loading: false }));
       }
     };
 
@@ -349,6 +356,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { hasAccess, isTrialActive } = await checkUserAccess(
           session.user as AuthUser
         );
+
+        const newState = {
+          user: session.user as AuthUser,
+          session: session as AuthSession,
+          loading: false,
+          hasAccess,
+          isTrialActive,
+        };
+
+        setState(newState);
+        setLastUpdated(Date.now());
 
         // Track login
         const discordId = getDiscordId(session.user);
@@ -368,17 +386,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           window.location.reload();
         }
-
-        const newState = {
-          user: session.user as AuthUser,
-          session: session as AuthSession,
-          loading: false,
-          hasAccess,
-          isTrialActive,
-        };
-
-        setState(newState);
-        setLastUpdated(Date.now());
 
         // Cache the auth data
         localStorage.setItem(

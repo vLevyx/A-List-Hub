@@ -93,11 +93,11 @@ export default function MiddlemanMarketPage(): ReactElement {
   }>({ type: null, message: "" });
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [requestHistory, setRequestHistory] = useState<RequestHistory[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [showScamList, setShowScamList] = useState(false);
   const [showScamModal, setShowScamModal] = useState(false);
   const [scamList, setScamList] = useState<Scammer[]>([]);
-  const [isLoadingScamList, setIsLoadingScamList] = useState(true);
+  const [isLoadingScamList, setIsLoadingScamList] = useState(false);
 
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -136,6 +136,7 @@ export default function MiddlemanMarketPage(): ReactElement {
   // Fetch only this user’s requests
   const loadRequestHistory = async () => {
     if (!user) return;
+
     setIsLoadingHistory(true);
     try {
       const discordId = getDiscordId(user);

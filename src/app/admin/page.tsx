@@ -119,9 +119,9 @@ export default function AdminPage() {
   // UI state
   const [activeTab, setActiveTab] = useState("users");
   const [loadingState, setLoadingState] = useState({
-    users: true,
-    logs: true,
-    analytics: true,
+    users: false,
+    logs: false,
+    analytics: false,
     action: false,
     refreshing: false,
   });
