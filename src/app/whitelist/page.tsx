@@ -186,9 +186,9 @@ export default function WhitelistPage() {
         throw new Error("Could not determine Discord ID");
       }
 
-      // Calculate trial end time (3 days from now in Unix timestamp)
+      // Calculate trial end time (7 days from now in Unix timestamp)
       const trialEnds =
-        Math.floor(Date.now() / 1000) + TRIAL_DAYS * 24 * 60 * 60;
+        Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
 
       const { data: sessionData } = await withTimeout(
         supabase.auth.getSession()
@@ -422,7 +422,7 @@ export default function WhitelistPage() {
               </h3>
               <p className="text-white/90">
                 Upon form submission, you will be granted a{" "}
-                <strong>3-day trial</strong> to enjoy the features and explore
+                <strong>7-day trial</strong> to enjoy the features and explore
                 on your own while we process your request.
               </p>
             </div>
