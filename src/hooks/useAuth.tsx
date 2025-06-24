@@ -13,6 +13,7 @@ import { getDiscordId, isUserWhitelisted, hasValidTrial } from "@/lib/utils";
 import type { AuthState, AuthUser, AuthSession } from "@/types/auth";
 import type { User } from "@/types/database";
 import { useRouter } from "next/navigation";
+import { withTimeout } from "@/lib/timeout";
 
 // Define auth context with extended functionality
 const AuthContext = createContext<
@@ -50,7 +51,7 @@ export const useAuth = () => {
 
 // Configuration constants
 const AUTH_CACHE_KEY = "auth_cache";
-const AUTH_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+const AUTH_CACHE_TTL = 0 * 60 * 1000; // 5 minutes
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY = 1000; // 1 second
 
@@ -118,11 +119,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!discordId) return { hasAccess: false, isTrialActive: false };
 
     try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("revoked, hub_trial, trial_expiration")
-        .eq("discord_id", discordId)
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from("users")
+          .select("revoked, hub_trial, trial_expiration")
+          .eq("discord_id", discordId)
+          .single()
+      );
 
       if (error) {
         if (attempt < MAX_RETRY_ATTEMPTS) {
@@ -208,12 +211,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithDiscord = async () => {
     try {
       setError(null);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "discord",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
+      const { error } = await withTimeout(
+        supabase.auth.signInWithOAuth({
+          provider: "discord",
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback`,
+          },
+        })
+      );
       if (error) throw error;
     } catch (error) {
       console.error("Error signing in with Discord:", error);
@@ -229,7 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       setError(null);
-      const { error } = await supabase.auth.signOut();
+      const { error } = await withTimeout(supabase.auth.signOut());
       if (error) throw error;
 
       // Clear auth cache
@@ -271,96 +276,99 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Initialize auth state
-  useEffect(() => {
-    // if (initialLoadAttemptedRef.current) {
-    //   setState((prev) => ({ ...prev, loading: false }));
-    //   return;
-    // }
+  // Define getSession at component level
+  const getSession = useCallback(async () => {
+    console.log("called");
+    try {
+      setState((prev) => ({ ...prev, loading: true }));
+      setError(null);
 
-    // initialLoadAttemptedRef.current = true;
+      const {
+        data: { session },
+        error,
+      } = await withTimeout(supabase.auth.getSession());
 
-    const getSession = async () => {
-      console.log("called");
-      try {
-        setState((prev) => ({ ...prev, loading: true }));
-        setError(null);
+      if (error) {
+        throw error;
+      }
 
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
-
-        if (error) {
-          throw error;
-        }
-
-        if (session?.user) {
-          const { hasAccess, isTrialActive } = await checkUserAccess(
-            session.user as AuthUser
-          );
-
-          const newState = {
-            user: session.user as AuthUser,
-            session: session as AuthSession,
-            loading: false,
-            hasAccess,
-            isTrialActive,
-          };
-
-          setState(newState);
-          setLastUpdated(Date.now());
-
-          // Cache the auth data
-          localStorage.setItem(
-            AUTH_CACHE_KEY,
-            JSON.stringify({
-              data: newState,
-              timestamp: Date.now(),
-            })
-          );
-        } else {
-          setState((prev) => ({ ...prev, loading: false }));
-        }
-      } catch (error) {
-        console.error("Error in getSession:", error);
-        setState((prev) => ({ ...prev, loading: false }));
-        setError(
-          error instanceof Error ? error : new Error("Failed to get session")
+      if (session?.user) {
+        const { hasAccess, isTrialActive } = await checkUserAccess(
+          session.user as AuthUser
         );
 
-        // Retry logic
-        if (retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
-          retryAttemptsRef.current++;
-          setTimeout(getSession, RETRY_DELAY * retryAttemptsRef.current);
-        } else {
-          // After max retries, ensure loading is set to false
-          setState((prev) => ({ ...prev, loading: false }));
-          console.error(
-            "Max retry attempts reached in getSession. Stopping further retries and setting loading to false."
-          );
-        }
-      } finally {
+        const newState = {
+          user: session.user as AuthUser,
+          session: session as AuthSession,
+          loading: false,
+          hasAccess,
+          isTrialActive,
+        };
+
+        setState(newState);
+        setLastUpdated(Date.now());
+
+        // Cache the auth data
+        localStorage.setItem(
+          AUTH_CACHE_KEY,
+          JSON.stringify({
+            data: newState,
+            timestamp: Date.now(),
+          })
+        );
+      } else {
         setState((prev) => ({ ...prev, loading: false }));
       }
-    };
+    } catch (error) {
+      console.error("Error in getSession:", error);
+      setState((prev) => ({ ...prev, loading: false }));
+      setError(
+        error instanceof Error ? error : new Error("Failed to get session")
+      );
 
+      // Retry logic
+      if (retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
+        retryAttemptsRef.current++;
+        setTimeout(getSession, RETRY_DELAY * retryAttemptsRef.current);
+      } else {
+        // After max retries, ensure loading is set to false
+        setState((prev) => ({ ...prev, loading: false }));
+        console.error(
+          "Max retry attempts reached in getSession. Stopping further retries and setting loading to false."
+        );
+      }
+    } finally {
+      setState((prev) => ({ ...prev, loading: false }));
+    }
+  }, []);
+
+  // Initialize auth state
+  useEffect(() => {
     getSession();
 
     // Set up auth state change listener
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
-        // Track login
-        const discordId = getDiscordId(session.user);
-        const username = session.user.user_metadata?.full_name;
+      if (event === "INITIAL_SESSION" && session?.user) {
+        // Only track login if we're on the OAuth callback URL with success parameter
+        const isSuccessfulAuth =
+          window.location.search.includes("?auth=success");
 
-        if (discordId) {
-          await supabase.rpc("upsert_user_login", {
-            target_discord_id: discordId,
-            user_name: username,
-          });
+        if (isSuccessfulAuth) {
+          const discordId = getDiscordId(session.user);
+          const username = session.user.user_metadata?.full_name;
+
+          if (discordId) {
+            await supabase.rpc("upsert_user_login", {
+              target_discord_id: discordId,
+              user_name: username,
+            });
+
+            // Remove the auth parameter from URL without page refresh
+            const newUrl = window.location.pathname;
+            router.replace(newUrl);
+          }
         }
 
         const { hasAccess, isTrialActive } = await checkUserAccess(
@@ -386,22 +394,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             timestamp: Date.now(),
           })
         );
-
-        //Silently refresh or reload screen since nextjs uses soft navigations
-        if (router) {
-          router.refresh();
-        } else {
-          window.location.reload();
-        }
-
-        // Set up periodic refresh
-        // if (refreshIntervalRef.current) {
-        //   clearInterval(refreshIntervalRef.current);
-        // }
-
-        // refreshIntervalRef.current = setInterval(() => {
-        //   refreshUserDataInternal();
-        // }, AUTH_CACHE_TTL);
       } else if (event === "SIGNED_OUT") {
         // Clear auth cache
         localStorage.removeItem(AUTH_CACHE_KEY);
