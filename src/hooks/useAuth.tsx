@@ -384,16 +384,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         setState(newState);
-        setLastUpdated(Date.now());
 
-        // Cache the auth data
-        localStorage.setItem(
-          AUTH_CACHE_KEY,
-          JSON.stringify({
-            data: newState,
-            timestamp: Date.now(),
-          })
-        );
+        // Only update timestamp if auth state actually changed
+        const authStateChanged =
+          !state.session?.user?.id ||
+          state.session.user.id !== session.user.id ||
+          state.hasAccess !== hasAccess ||
+          state.isTrialActive !== isTrialActive;
+
+        if (authStateChanged) {
+          setLastUpdated(Date.now());
+
+          // Cache the auth data
+          localStorage.setItem(
+            AUTH_CACHE_KEY,
+            JSON.stringify({
+              data: newState,
+              timestamp: Date.now(),
+            })
+          );
+        }
       } else if (event === "SIGNED_OUT") {
         // Clear auth cache
         localStorage.removeItem(AUTH_CACHE_KEY);
