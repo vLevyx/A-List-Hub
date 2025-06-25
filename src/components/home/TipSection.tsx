@@ -20,7 +20,7 @@ const tips = [
   "Never Combat Log (CL). It's a serious offense — always RP through situations.",
   "Use lockers in major towns for secure 200-slot storage. One-time $1M fee.",
   "Helis are expensive and require rare HQ parts. Plan long-term before investing.",
-  "Check ammo compatibility using ALIS Hub or weapon guides before crafting mags.",
+  "Check ammo compatibility using A-List Hub or weapon guides before crafting mags.",
   "Trust no one outside safe zones. Lock your doors — even when smelting.",
   "Follow the New Life Rule (NLR): stay away from your death location for a while.",
   "Track item demand in your phone — timing the market can double your income."
