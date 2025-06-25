@@ -78,1420 +78,1559 @@ export default function CalculatorPage() {
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [results, setResults] = useState<CalculationResults | null>(null);
 
-// Type definitions
-interface ItemsByCategory {
-  [category: string]: string[];
-}
-
-interface StorageOptions {
-  vehicles: {
-    [vehicleName: string]: number | { canisters: number };
-  };
-  backpacks: {
-    [backpackName: string]: number;
-  };
-}
-
-interface ComponentRequirement {
-  [componentName: string]: number;
-}
-
-interface ItemComponentData {
-  HQ?: ComponentRequirement;
-  "Non-HQ"?: ComponentRequirement;
-  Resources?: ComponentRequirement;
-}
-
-interface ItemComponents {
-  [category: string]: {
-    [itemName: string]: ItemComponentData;
-  };
-}
-
-interface ComponentResources {
-  [componentName: string]: ComponentRequirement;
-}
-
-interface CraftingLevels {
-  [itemName: string]: number;
-}
-
-interface CraftingTimes {
-  [itemName: string]: number;
-}
-
-// Game data
-const itemsByCategory: ItemsByCategory = {
-  Weapons: [
-    "AK-74",
-    "AKS-74U",
-    "CheyTac M200 Intervention",
-    "Colt 1911",
-    "Desert Eagle",
-    "M16A2",
-    "M16A2 - AUTO",
-    "M16 Carbine",
-    "M21 SWS",
-    "M249 SAW",
-    "M416",
-    "M9",
-    "MP 43 1C",
-    "MP5A2",
-    "MP7A2",
-    "PKM",
-    "PM",
-    "RPK-74",
-    "Sa-58P",
-    "Sa-58V",
-    "Scar-H",
-    "SIG MCX",
-    "SIG MCX SPEAR",
-    "SSG10A2-Sniper",
-    "Steyr AUG",
-    "SR-25 Rifle",
-    "SVD"
-  ],
-  Magazines: [
-    "30rnd 9x19 Mag",
-    "8rnd .45 ACP",
-    "9x18mm 8rnd PM Mag",
-    "9x19mm 15rnd M9 Mag",
-    ".300 Blackout Mag",
-    ".338 5rnd FMJ",
-    ".50 AE 7rnd Mag",
-    "12/70 7mm Buckshot",
-    "4.6x40 40rnd Mag",
-    "5.45x39mm 30rnd AK Mag",
-    "5.45x39mm 45rnd RPK-74 Tracer Mag",
-    "5.56x45mm 30rnd AUG Mag",
-    "5.56x45mm 30rnd STANAG Mag",
-    "5.56x45mm 200rnd M249 Belt",
-    "7Rnd M200 Magazine",
-    "7.62x39mm 30rnd Sa-58 Mag",
-    "7.62x51mm FMJ",
-    "7.62x51mm 20rnd M14 Mag",
-    "7.62x51mm 30rnd Mag",
-    "SR25 7.62x51mm 20rnd",
-    "7.62x54mmR 100rnd PK Belt",
-    "7.62x54mmR 10rnd SVD Sniper Mag",
-    "SPEAR 6.8x51 25rnd"
-  ],
-  Attachments: [
-    "A2 Flash Hider",
-    "ART II Scope",
-    "Carry Handle Red-Dot-Sight",
-    "EOTECH XPS3",
-    "Elcan Specter",
-    "Leupold VX-6",
-    "PSO-1 Scope",
-    "Reflex Scope",
-    "4x20 Carry Handle Scope",
-    "4.7mm FlashHider",
-    "6.8x51mm FlashHider",
-    "6P26 Flash Hider",
-    "6P20 Muzzle Brake",
-    "7.62x51mm FlashHider"
-  ],
-  Vehicles: [
-    "M1025 Light Armoured Vehicle",
-    "M151A2 Off-Road",
-    "M151A2 Off-Road Open Top",
-    "M923A1 Fuel Truck",
-    "M923A1 Transport Truck",
-    "M923A1 Transport Truck - Canopy",
-    "M998 Light Utility Vehicle",
-    "M998 Light Utility Vehicle - Canopy",
-    "Mi-8MT Transport Helicopter",
-    "Pickup-Truck",
-    "S105 Car",
-    "S1203 Minibus",
-    "S1203 - Laboratory",
-    "UAZ-452 Off-road",
-    "UAZ-452 Off-road - Laboratory",
-    "UAZ-469 Off-road",
-    "UAZ-469 Off-road - Open Top",
-    "UH-1H Transport Helicopter",
-    "Ural-4320 Fuel Truck",
-    "Ural-4320 Transport Truck",
-    "Ural-4320 Transport Truck - Canopy",
-    "Ural (Device)",
-    "VW Rolf"
-  ],
-  Vests: [
-    "6B2 Vest",
-    "6B3 Vest",
-    "M69 Vest",
-    "PASGT Vest"
-  ],
-  Helmets: [
-    "PASGT Helmet",
-    "PASGT Helmet - Camouflaged",
-    "PASGT Helmet - Camouflaged Netting",
-    "SPH-4 Helmet",
-    "SSh-68 Helmet",
-    "SSh-68 Helmet - Camouflaged",
-    "SSh-68 Helmet - Cover",
-    "SSh-68 Helmet - KZS",
-    "SSh-68 Helmet - Netting",
-    "ZSh-5 Helmet"
-  ],
-  Clothes: [
-    "ALICE Medium Backpack",
-    "Bandana",
-    "Balaclava",
-    "BDU Blouse",
-    "BDU Blouse - Rolled-up",
-    "BDU Trousers",
-    "Beanie",
-    "Boonie",
-    "Cap - All Variants",
-    "Cargo Pants",
-    "Cargo Pants (Colored)",
-    "Cardigan",
-    "Classic Shoe",
-    "CWU-27 Pilot Coveralls",
-    "Dress",
-    "Fedora",
-    "Fisher Hat",
-    "Flat Cap",
-    "Half Mask",
-    "Hunting Vest",
-    "IIFS Large Combat Field Pack",
-    "Jacket",
-    "Jeans",
-    "Jeans (Colored)",
-    "KLMK Coveralls",
-    "Knit Cap",
-    "Kolobok Backpack",
-    "M70 Backpack",
-    "M70 Cap",
-    "M70 Parka",
-    "M70 Trousers",
-    "M88 Field Cap",
-    "M88 Jacket",
-    "M88 Jacket - Rolled-up",
-    "M88 Trousers",
-    "Mask (Medical)",
-    "Mask (Latex)",
-    "Mask (Ski)",
-    "Officer's Cap",
-    "Panamka",
-    "Paper Bag",
-    "Polo",
-    "Pullover",
-    "Robe",
-    "Runner Shoe",
-    "Sneaker",
-    "Soviet Combat Boots",
-    "Soviet Pilot Jacket",
-    "Soviet Pilot Pants",
-    "Suit Jacket",
-    "Suit Pants",
-    "Sweater",
-    "Sweat Pants",
-    "TShirt",
-    "US Combat Boots",
-    "Veshmeshok Backpack",
-    "Wool Hat"
-  ],
-  "HQ Components": [
-    "Ammo (HQ)",
-    "Attachment Part (HQ)",
-    "Component (HQ)",
-    "Engine Part (HQ)",
-    "Interior Part (HQ)",
-    "Kevlar",
-    "Mechanical Component (HQ)",
-    "Rotor (HQ)",
-    "Stabilizer (HQ)",
-    "Weapon Part (HQ)"
-  ],
-  Components: [
-    "Cloth",
-    "Iron Plate",
-    "Component",
-    "Tempered Glass",
-    "Weapon Part",
-    "Stabilizer",
-    "Attachment Part",
-    "Ammo",
-    "Mechanical Component",
-    "Engine Part",
-    "Interior Part",
-    "Rotor"
-  ]
-};
-
-const craftingLevels: CraftingLevels = {
-  "AK-74": 8,
-  "AKS-74U": 8,
-  "CheyTac M200 Intervention": 13,
-  "Colt 1911": 10,
-  "Desert Eagle": 8,
-  "M16A2": 5,
-  "M16A2 - AUTO": 6,
-  "M16 Carbine": 6,
-  "M21 SWS": 7,
-  "M249 SAW": 11,
-  "M416": 7,
-  "M9": 3,
-  "MP 43 1C": 8,
-  "MP5A2": 5,
-  "MP7A2": 5,
-  "PKM": 12,
-  "PM": 2,
-  "RPK-74": 10,
-  "Sa-58P": 9,
-  "Sa-58V": 9,
-  "Scar-H": 10,
-  "SIG MCX": 7,
-  "SIG MCX SPEAR": 10,
-  "SSG10A2-Sniper": 10,
-  "Steyr AUG": 6,
-  "SR-25 Rifle": 10,
-  "SVD": 10
-};
-
-const storageOptions: StorageOptions = {
-  vehicles: {
-    "M1025 Light Armored Vehicle": 18,
-    "M151A2 Off-Road": 16,
-    "M151A2 Off-Road - Open Top": 16,
-    "M998 Light Utility Vehicle": 18,
-    "M998 Light Utility Vehicle - Canopy": 18,
-    "M923A1 Fuel Truck": { canisters: 53 },
-    "M923A1 Transport Truck": 50,
-    "M923A1 Transport Truck - Canopy": 83,
-    "Pickup Truck": 18,
-    "UAZ-452 Off-Road": 28,
-    "UAZ-452 Off-Road - Laboratory": { canisters: 110 },
-    "UAZ-452 Off-Road - Banana": 28,
-    "UAZ-469 Off-Road": 13,
-    "UAZ-469 Off-Road - Open Top": 13,
-    "Ural-4320 Fuel Truck": { canisters: 83 },
-    "EVENT | Ural-4320 Fuel Truck": { canisters: 98 },
-    "Ural-4320 Transport Truck": 100,
-    "Ural-4320 Transport Truck - Canopy": 116,
-    "EVENT | Ural-4320 Transport Truck - Canopy": 128,
-    "VW Rolf": 18,
-    "S105 Car": 18,
-    "S1203 Minibus": 18,
-    "MI8-MT Transport Helicopter": 26,
-    "UH-1H Transport Helicopter": 26
-  },
-  backpacks: {
-    "ALICE Medium Backpack": 13,
-    "IIFS Large Combat Field Pack": 19,
-    "Kolobok Backpack": 10,
-    "M70 Backpack": 13,
-    "Veshmeshok Backpack": 6
+  // Type definitions
+  interface ItemsByCategory {
+    [category: string]: string[];
   }
-};
 
-const itemComponents: ItemComponents = {
-  Weapons: {
-    "AK-74": {
-      HQ: {
-        "Weapon Part (HQ)": 2,
-        "Stabilizer (HQ)": 2,
-        "Attachment Part (HQ)": 2
-      }
-    },
-    "AKS-74U": {
-      HQ: {
-        "Weapon Part (HQ)": 1,
-        "Stabilizer (HQ)": 1,
-        "Attachment Part (HQ)": 1
-      }
-    },
-    "CheyTac M200 Intervention": {
-      HQ: {
-        "Weapon Part (HQ)": 4,
-        "Stabilizer (HQ)": 4,
-        "Attachment Part (HQ)": 5,
-        "Special Gun Barrel": 1
-      }
-    },
-    "Colt 1911": {
-      "Non-HQ": {
-        "Weapon Part": 5,
-        "Stabilizer": 3,
-        "Attachment Part": 3
-      }
-    },
-    "Desert Eagle": {
-      "Non-HQ": {
-        "Weapon Part": 13,
-        "Stabilizer": 7,
-        "Attachment Part": 8
-      }
-    },
-    "M16A2": {
-      "Non-HQ": {
-        "Weapon Part": 27,
-        "Stabilizer": 15,
-        "Attachment Part": 17
-      }
-    },
-    "M16A2 - AUTO": {
-      "Non-HQ": {
-        "Weapon Part": 29,
-        "Stabilizer": 16,
-        "Attachment Part": 18
-      }
-    },
-    "M16 Carbine": {
-      "Non-HQ": {
-        "Weapon Part": 29,
-        "Stabilizer": 16,
-        "Attachment Part": 18
-      }
-    },
-    "M21 SWS": {
-      "Non-HQ": {
-        "Weapon Part": 39,
-        "Stabilizer": 21,
-        "Attachment Part": 24
-      }
-    },
-    "M249 SAW": {
-      HQ: {
-        "Weapon Part (HQ)": 9,
-        "Stabilizer (HQ)": 9,
-        "Attachment Part (HQ)": 11,
-        "Special Gun Barrel": 1
-      }
-    },
-    "M416": {
-      "Non-HQ": {
-        "Weapon Part": 34,
-        "Stabilizer": 19,
-        "Attachment Part": 21
-      }
-    },
-    "M9": {
-      "Non-HQ": {
-        "Weapon Part": 5,
-        "Stabilizer": 3,
-        "Attachment Part": 3
-      }
-    },
-    "MP 43 1C": {
-      HQ: {
-        "Weapon Part (HQ)": 1,
-        "Stabilizer (HQ)": 1,
-        "Attachment Part (HQ)": 1
-      }
-    },
-    "MP5A2": {
-      "Non-HQ": {
-        "Weapon Part": 15,
-        "Stabilizer": 8,
-        "Attachment Part": 9
-      }
-    },
-    "MP7A2": {
-      "Non-HQ": {
-        "Weapon Part": 15,
-        "Stabilizer": 8,
-        "Attachment Part": 9
-      }
-    },
-    "PKM": {
-      HQ: {
-        "Weapon Part (HQ)": 12,
-        "Stabilizer (HQ)": 12,
-        "Attachment Part (HQ)": 15,
-        "Special Gun Barrel": 1
-      }
-    },
-    "PM": {
-      "Non-HQ": {
-        "Weapon Part": 4,
-        "Stabilizer": 2,
-        "Attachment Part": 2
-      }
-    },
-    "RPK-74": {
-      HQ: {
-        "Weapon Part (HQ)": 2,
-        "Stabilizer (HQ)": 2,
-        "Attachment Part (HQ)": 3
-      }
-    },
-    "Sa-58V": {
-      HQ: {
-        "Weapon Part (HQ)": 2,
-        "Stabilizer (HQ)": 2,
-        "Attachment Part (HQ)": 2
-      }
-    },
-    "Sa-58P": {
-      HQ: {
-        "Weapon Part (HQ)": 2,
-        "Stabilizer (HQ)": 2,
-        "Attachment Part (HQ)": 2
-      }
-    },
-    "Scar-H": {
-      HQ: {
-        "Weapon Part (HQ)": 2,
-        "Stabilizer (HQ)": 2,
-        "Attachment Part (HQ)": 3
-      }
-    },
-    "SIG MCX": {
-      "Non-HQ": {
-        "Weapon Part": 38,
-        "Stabilizer": 20,
-        "Attachment Part": 23
-      }
-    },
-    "SIG MCX SPEAR": {
-      HQ: {
-        "Weapon Part (HQ)": 2,
-        "Stabilizer (HQ)": 2,
-        "Attachment Part (HQ)": 3
-      }
-    },
-    "SSG10A2-Sniper": {
-      HQ: {
-        "Weapon Part (HQ)": 2,
-        "Stabilizer (HQ)": 2,
-        "Attachment Part (HQ)": 3
-      }
-    },
-    "Steyr AUG": {
-      "Non-HQ": {
-        "Weapon Part": 33,
-        "Stabilizer": 18,
-        "Attachment Part": 20
-      }
-    },
-    "SR-25 Rifle": {
-      HQ: {
-        "Weapon Part (HQ)": 2,
-        "Stabilizer (HQ)": 2,
-        "Attachment Part (HQ)": 3
-      }
-    },
-    "SVD": {
-      HQ: {
-        "Weapon Part (HQ)": 6,
-        "Stabilizer (HQ)": 6,
-        "Attachment Part (HQ)": 7
-      }
-    }
-  },
-  Magazines: {
-    ".300 Blackout Mag": {
-      "Non-HQ": { "Ammo": 2 }
-    },
-    ".338 5rnd FMJ": {
-      "Non-HQ": { "Ammo": 2 }
-    },
-    ".50 AE 7rnd Mag": {
-      HQ: { "Ammo (HQ)": 2 }
-    },
-    "12/70 7mm Buckshot": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "30rnd 9x19 Mag": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "4.6x40 40rnd Mag": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "7Rnd M200 Magazine": {
-      HQ: { "Ammo (HQ)": 3 }
-    },
-    "7.62x39mm 30rnd Sa-58 Mag": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "7.62x51mm 20rnd M14 Mag": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "7.62x51mm 30rnd Mag": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "SR25 7.62x51mm 20rnd": {
-      HQ: { "Ammo (HQ)": 1 }
-    },
-    "8rnd .45 ACP": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "9x18mm 8rnd PM Mag": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "9x19mm 15rnd M9 Mag": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "100rnd PK Belt": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "5.56x45mm 200rnd M249 Belt": {
-      HQ: { "Ammo (HQ)": 15 }
-    },
-    "5.56x45mm 30rnd AUG Mag": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "5.56x45mm 30rnd STANAG Mag": {
-      "Non-HQ": { "Ammo": 1 }
-    },
-    "5.45x39mm 30rnd AK Mag": {
-      "Non-HQ": { "Ammo": 2 }
-    },
-    "5.45x39mm 45rnd RPK-74 Tracer Mag": {
-      HQ: { "Ammo (HQ)": 1 }
-    },
-    "7.62x51mm FMJ": {
-      HQ: { "Ammo (HQ)": 1 }
-    },
-    "7.62x54mmR 100rnd PK Belt": {
-      HQ: { "Ammo (HQ)": 15 }
-    },
-    "7.62x54mmR 10rnd SVD Sniper Mag": {
-      HQ: { "Ammo (HQ)": 1 }
-    },
-    "SPEAR 6.8x51 25rnd": {
-      HQ: { "Ammo (HQ)": 1 }
-    }
-  },
-  Attachments: {
-    "4x20 Carry Handle Scope": {
-      "Non-HQ": {
-        "Component": 41,
-        "Tempered Glass": 18
-      }
-    },
-    "4.7mm FlashHider": {
-      "Non-HQ": { "Component": 1 }
-    },
-    "6.8x51mm FlashHider": {
-      "Non-HQ": {
-        "Component": 2,
-        "Tempered Glass": 1
-      }
-    },
-    "6P20 Muzzle Brake": {
-      "Non-HQ": {
-        "Component": 2,
-        "Tempered Glass": 1
-      }
-    },
-    "6P26 Flash Hider": {
-      "Non-HQ": {
-        "Component": 2,
-        "Tempered Glass": 1
-      }
-    },
-    "7.62x51mm FlashHider": {
-      "Non-HQ": {
-        "Component": 3,
-        "Tempered Glass": 1
-      }
-    },
-    "A2 Flash Hider": {
-      "Non-HQ": {
-        "Component": 2,
-        "Tempered Glass": 1
-      }
-    },
-    "ART II Scope": {
-      "Non-HQ": {
-        "Component": 2,
-        "Tempered Glass": 1
-      }
-    },
-    "Carry Handle Red-Dot-Sight": {
-      "Non-HQ": {
-        "Component": 5,
-        "Tempered Glass": 2
-      }
-    },
-    "EOTECH XPS3": {
-      "Non-HQ": {
-        "Component": 2,
-        "Tempered Glass": 1
-      }
-    },
-    "Elcan Specter": {
-      "Non-HQ": {
-        "Component": 11,
-        "Tempered Glass": 5
-      }
-    },
-    "Leupold VX-6": {
-      "Non-HQ": {
-        "Component": 17,
-        "Tempered Glass": 8
-      }
-    },
-    "PSO-1 Scope": {
-      "Non-HQ": {
-        "Component": 4,
-        "Tempered Glass": 1
-      }
-    },
-    "Reflex Scope": {
-      "Non-HQ": {
-        "Component": 2,
-        "Tempered Glass": 1
-      }
-    }
-  },
-  Vehicles: {
-    "M1025 Light Armoured Vehicle": {
-      "Non-HQ": {
-        "Mechanical Component": 9,
-        "Interior Part": 5,
-        "Engine Part": 9
-      }
-    },
-    "M151A2 Off-Road": {
-      "Non-HQ": {
-        "Mechanical Component": 1,
-        "Engine Part": 1
-      }
-    },
-    "M151A2 Off-Road Open Top": {
-      "Non-HQ": {
-        "Mechanical Component": 1,
-        "Engine Part": 1
-      }
-    },
-    "M923A1 Fuel Truck": {
-      HQ: {
-        "Mechanical Component (HQ)": 1,
-        "Interior Part (HQ)": 1,
-        "Engine Part (HQ)": 1
-      }
-    },
-    "M923A1 Transport Truck": {
-      "Non-HQ": {
-        "Mechanical Component": 31,
-        "Interior Part": 19,
-        "Engine Part": 31
-      }
-    },
-    "M923A1 Transport Truck - Canopy": {
-      HQ: {
-        "Mechanical Component (HQ)": 2,
-        "Interior Part (HQ)": 2,
-        "Engine Part (HQ)": 1
-      }
-    },
-    "M998 Light Utility Vehicle": {
-      "Non-HQ": {
-        "Mechanical Component": 5,
-        "Interior Part": 3,
-        "Engine Part": 5
-      }
-    },
-    "M998 Light Utility Vehicle - Canopy": {
-      "Non-HQ": {
-        "Mechanical Component": 6,
-        "Interior Part": 4,
-        "Engine Part": 4
-      }
-    },
-    "Mi-8MT Transport Helicopter": {
-      HQ: {
-        "Mechanical Component (HQ)": 30,
-        "Interior Part (HQ)": 27,
-        "Engine Part (HQ)": 19,
-        "Rotor (HQ)": 48,
-        "Special Rotor": 1
-      }
-    },
-    "Pickup-Truck": {
-      "Non-HQ": {
-        "Mechanical Component": 19,
-        "Interior Part": 11,
-        "Engine Part": 19
-      }
-    },
-    "S105 Car": {
-      "Non-HQ": {
-        "Mechanical Component": 3,
-        "Interior Part": 2,
-        "Engine Part": 3
-      }
-    },
-    "S1203 - Laboratory": {
-      "Non-HQ": {
-        "Mechanical Component": 41,
-        "Interior Part": 25,
-        "Engine Part": 41
-      }
-    },
-    "S1203 Minibus": {
-      "Non-HQ": {
-        "Mechanical Component": 7,
-        "Interior Part": 4,
-        "Engine Part": 7
-      }
-    },
-    "UAZ-452 Off-road": {
-      "Non-HQ": {
-        "Mechanical Component": 3,
-        "Interior Part": 2,
-        "Engine Part": 3
-      }
-    },
-    "UAZ-452 Off-road - Laboratory": {
-      HQ: {
-        "Mechanical Component (HQ)": 4,
-        "Interior Part (HQ)": 3,
-        "Engine Part (HQ)": 2
-      }
-    },
-    "UAZ-469 Off-road": {
-      "Non-HQ": {
-        "Mechanical Component": 1,
-        "Interior Part": 1,
-        "Engine Part": 1
-      }
-    },
-    "UAZ-469 Off-road - Open Top": {
-      "Non-HQ": {
-        "Mechanical Component": 1,
-        "Interior Part": 1,
-        "Engine Part": 1
-      }
-    },
-    "UH-1H Transport Helicopter": {
-      HQ: {
-        "Mechanical Component (HQ)": 19,
-        "Interior Part (HQ)": 17,
-        "Engine Part (HQ)": 12,
-        "Rotor (HQ)": 30,
-        "Special Rotor": 1
-      }
-    },
-    "Ural-4320 Fuel Truck": {
-      HQ: {
-        "Mechanical Component (HQ)": 4,
-        "Interior Part (HQ)": 3,
-        "Engine Part (HQ)": 2
-      }
-    },
-    "Ural-4320 Transport Truck": {
-      HQ: {
-        "Mechanical Component (HQ)": 4,
-        "Interior Part (HQ)": 3,
-        "Engine Part (HQ)": 2
-      }
-    },
-    "Ural-4320 Transport Truck - Canopy": {
-      HQ: {
-        "Mechanical Component (HQ)": 5,
-        "Interior Part (HQ)": 5,
-        "Engine Part (HQ)": 3
-      }
-    },
-    "Ural (Device)": {
-      HQ: {
-        "Mechanical Component (HQ)": 29,
-        "Interior Part (HQ)": 26,
-        "Engine Part (HQ)": 18
-      }
-    },
-    "VW Rolf": {
-      "Non-HQ": {
-        "Mechanical Component": 31,
-        "Interior Part": 19,
-        "Engine Part": 31
-      }
-    }
-  },
-  Vests: {
-    "6B2 Vest": {
-      "Non-HQ": {
-        "Iron Plate": 10,
-        "Cloth": 14
-      }
-    },
-    "6B3 Vest": {
-      HQ: { "Kevlar": 7 }
-    },
-    "M69 Vest": {
-      "Non-HQ": {
-        "Iron Plate": 10,
-        "Cloth": 14
-      }
-    },
-    "PASGT Vest": {
-      "Non-HQ": {
-        "Iron Plate": 10,
-        "Cloth": 14
-      }
-    }
-  },
-  Helmets: {
-    "PASGT Helmet": {
-      "Non-HQ": {
-        "Iron Plate": 2,
-        "Cloth": 2
-      }
-    },
-    "PASGT Helmet - Camouflaged": {
-      "Non-HQ": {
-        "Iron Plate": 2,
-        "Cloth": 2
-      }
-    },
-    "PASGT Helmet - Camouflaged Netting": {
-      "Non-HQ": {
-        "Iron Plate": 2,
-        "Cloth": 2
-      }
-    },
-    "SPH-4 Helmet": {
-      "Non-HQ": {
-        "Iron Plate": 7,
-        "Cloth": 10
-      }
-    },
-    "SSh-68 Helmet": {
-      "Non-HQ": {
-        "Iron Plate": 2,
-        "Cloth": 2
-      }
-    },
-    "SSh-68 Helmet - Camouflaged": {
-      "Non-HQ": {
-        "Iron Plate": 2,
-        "Cloth": 2
-      }
-    },
-    "SSh-68 Helmet - Cover": {
-      "Non-HQ": {
-        "Iron Plate": 2,
-        "Cloth": 2
-      }
-    },
-    "SSh-68 Helmet - KZS": {
-      "Non-HQ": {
-        "Iron Plate": 2,
-        "Cloth": 2
-      }
-    },
-    "SSh-68 Helmet - Netting": {
-      "Non-HQ": {
-        "Iron Plate": 2,
-        "Cloth": 2
-      }
-    },
-    "ZSh-5 Helmet": {
-      "Non-HQ": {
-        "Iron Plate": 7,
-        "Cloth": 10
-      }
-    }
-  },
-  Clothes: {
-    "ALICE Medium Backpack": {
-      "Non-HQ": { "Cloth": 2 }
-    },
-    "Bandana": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Balaclava": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "BDU Blouse": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "BDU Blouse - Rolled-up": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "BDU Trousers": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Beanie": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Boonie": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Cap - All Variants": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Cargo Pants": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Cargo Pants (Colored)": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Cardigan": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Classic Shoe": {
-      "Non-HQ": { "Cloth": 2 }
-    },
-    "CWU-27 Pilot Coveralls": {
-      "Non-HQ": { "Cloth": 20 }
-    },
-    "Dress": {
-      "Non-HQ": { "Cloth": 3 }
-    },
-    "Fedora": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Fisher Hat": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Flat Cap": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Half Mask": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Hunting Vest": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "IIFS Large Combat Field Pack": {
-      "Non-HQ": { "Cloth": 32 }
-    },
-    "Jacket": {
-      "Non-HQ": { "Cloth": 2 }
-    },
-    "Jeans": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Jeans (Colored)": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "KLMK Coveralls": {
-      "Non-HQ": { "Cloth": 20 }
-    },
-    "Knit Cap": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Kolobok Backpack": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "M70 Backpack": {
-      "Non-HQ": { "Cloth": 2 }
-    },
-    "M70 Cap": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "M70 Parka": {
-      "Non-HQ": { "Cloth": 2 }
-    },
-    "M70 Trousers": {
-      "Non-HQ": { "Cloth": 2 }
-    },
-    "M88 Field Cap": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "M88 Jacket": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "M88 Jacket - Rolled-up": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "M88 Trousers": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Mask (Medical)": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Mask (Latex)": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Mask (Ski)": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Officer's Cap": {
-      "Non-HQ": { "Cloth": 64 }
-    },
-    "Panamka": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Paper Bag": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Polo": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Pullover": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Robe": {
-      "Non-HQ": { "Cloth": 7 }
-    },
-    "Runner Shoe": {
-      "Non-HQ": { "Cloth": 2 }
-    },
-    "Sneaker": {
-      "Non-HQ": { "Cloth": 4 }
-    },
-    "Soviet Combat Boots": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Soviet Pilot Jacket": {
-      "Non-HQ": { "Cloth": 11 }
-    },
-    "Soviet Pilot Pants": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Suit Jacket": {
-      "Non-HQ": { "Cloth": 61 }
-    },
-    "Suit Pants": {
-      "Non-HQ": { "Cloth": 50 }
-    },
-    "Sweater": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Sweat Pants": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "TShirt": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "US Combat Boots": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Veshmeshok Backpack": {
-      "Non-HQ": { "Cloth": 1 }
-    },
-    "Wool Hat": {
-      "Non-HQ": { "Cloth": 50 }
-    }
-  },
-  "HQ Components": {
-    "Ammo (HQ)": {
-      Resources: { "Petrol": 1 },
-      "Non-HQ": { "Ammo": 3 }
-    },
-    "Attachment Part (HQ)": {
-      Resources: { "Wooden Plank": 15 },
-      "Non-HQ": { "Attachment Part": 3 }
-    },
-    "Component (HQ)": {
-      Resources: { "Gold Ingot": 15 },
-      "Non-HQ": { "Component": 2 }
-    },
-    "Engine Part (HQ)": {
-      Resources: { "Copper Ingot": 45, "Petrol": 45 },
-      "Non-HQ": { "Engine Part": 9 }
-    },
-    "Interior Part (HQ)": {
-      Resources: { "Wooden Plank": 45 },
-      "Non-HQ": { "Interior Part": 9 }
-    },
+  interface StorageOptions {
+    vehicles: {
+      [vehicleName: string]: number | { canisters: number };
+    };
+    backpacks: {
+      [backpackName: string]: number;
+    };
+  }
+
+  interface ComponentRequirement {
+    [componentName: string]: number;
+  }
+
+  interface ItemComponentData {
+    HQ?: ComponentRequirement;
+    "Non-HQ"?: ComponentRequirement;
+    Resources?: ComponentRequirement;
+  }
+
+  interface ItemComponents {
+    [category: string]: {
+      [itemName: string]: ItemComponentData;
+    };
+  }
+
+  interface ComponentResources {
+    [componentName: string]: ComponentRequirement;
+  }
+
+  interface CraftingLevels {
+    [itemName: string]: number;
+  }
+
+  interface CraftingTimes {
+    [itemName: string]: number;
+  }
+
+  // Game data
+  const itemsByCategory: ItemsByCategory = {
+    Weapons: [
+      "AK-74",
+      "AKS-74U",
+      "CheyTac M200 Intervention",
+      "Colt 1911",
+      "Desert Eagle",
+      "M16A2",
+      "M16A2 - AUTO",
+      "M16 Carbine",
+      "M21 SWS",
+      "M249 SAW",
+      "M416",
+      "M9",
+      "MP 43 1C",
+      "MP5A2",
+      "MP7A2",
+      "PKM",
+      "PM",
+      "RPK-74",
+      "Sa-58P",
+      "Sa-58V",
+      "Scar-H",
+      "SIG MCX",
+      "SIG MCX SPEAR",
+      "SSG10A2-Sniper",
+      "Steyr AUG",
+      "SR-25 Rifle",
+      "SVD",
+    ],
+    Magazines: [
+      "30rnd 9x19 Mag",
+      "8rnd .45 ACP",
+      "9x18mm 8rnd PM Mag",
+      "9x19mm 15rnd M9 Mag",
+      ".300 Blackout Mag",
+      ".338 5rnd FMJ",
+      ".50 AE 7rnd Mag",
+      "12/70 7mm Buckshot",
+      "4.6x40 40rnd Mag",
+      "5.45x39mm 30rnd AK Mag",
+      "5.45x39mm 45rnd RPK-74 Tracer Mag",
+      "5.56x45mm 30rnd AUG Mag",
+      "5.56x45mm 30rnd STANAG Mag",
+      "5.56x45mm 200rnd M249 Belt",
+      "7Rnd M200 Magazine",
+      "7.62x39mm 30rnd Sa-58 Mag",
+      "7.62x51mm FMJ",
+      "7.62x51mm 20rnd M14 Mag",
+      "7.62x51mm 30rnd Mag",
+      "SR25 7.62x51mm 20rnd",
+      "7.62x54mmR 100rnd PK Belt",
+      "7.62x54mmR 10rnd SVD Sniper Mag",
+      "SPEAR 6.8x51 25rnd",
+    ],
+    Attachments: [
+      "A2 Flash Hider",
+      "ART II Scope",
+      "Carry Handle Red-Dot-Sight",
+      "EOTECH XPS3",
+      "Elcan Specter",
+      "Leupold VX-6",
+      "PSO-1 Scope",
+      "Reflex Scope",
+      "4x20 Carry Handle Scope",
+      "4.7mm FlashHider",
+      "6.8x51mm FlashHider",
+      "6P26 Flash Hider",
+      "6P20 Muzzle Brake",
+      "7.62x51mm FlashHider",
+    ],
+    Vehicles: [
+      "M1025 Light Armoured Vehicle",
+      "M151A2 Off-Road",
+      "M151A2 Off-Road Open Top",
+      "M923A1 Fuel Truck",
+      "M923A1 Transport Truck",
+      "M923A1 Transport Truck - Canopy",
+      "M998 Light Utility Vehicle",
+      "M998 Light Utility Vehicle - Canopy",
+      "Mi-8MT Transport Helicopter",
+      "Pickup-Truck",
+      "S105 Car",
+      "S1203 Minibus",
+      "S1203 - Laboratory",
+      "UAZ-452 Off-road",
+      "UAZ-452 Off-road - Laboratory",
+      "UAZ-469 Off-road",
+      "UAZ-469 Off-road - Open Top",
+      "UH-1H Transport Helicopter",
+      "Ural-4320 Fuel Truck",
+      "Ural-4320 Transport Truck",
+      "Ural-4320 Transport Truck - Canopy",
+      "Ural (Device)",
+      "VW Rolf",
+    ],
+    Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest"],
+    Helmets: [
+      "PASGT Helmet",
+      "PASGT Helmet - Camouflaged",
+      "PASGT Helmet - Camouflaged Netting",
+      "SPH-4 Helmet",
+      "SSh-68 Helmet",
+      "SSh-68 Helmet - Camouflaged",
+      "SSh-68 Helmet - Cover",
+      "SSh-68 Helmet - KZS",
+      "SSh-68 Helmet - Netting",
+      "ZSh-5 Helmet",
+    ],
+    Clothes: [
+      "ALICE Medium Backpack",
+      "Bandana",
+      "Balaclava",
+      "BDU Blouse",
+      "BDU Blouse - Rolled-up",
+      "BDU Trousers",
+      "Beanie",
+      "Boonie",
+      "Cap - All Variants",
+      "Cargo Pants",
+      "Cargo Pants (Colored)",
+      "Cardigan",
+      "Classic Shoe",
+      "CWU-27 Pilot Coveralls",
+      "Dress",
+      "Fedora",
+      "Fisher Hat",
+      "Flat Cap",
+      "Half Mask",
+      "Hunting Vest",
+      "IIFS Large Combat Field Pack",
+      "Jacket",
+      "Jeans",
+      "Jeans (Colored)",
+      "KLMK Coveralls",
+      "Knit Cap",
+      "Kolobok Backpack",
+      "M70 Backpack",
+      "M70 Cap",
+      "M70 Parka",
+      "M70 Trousers",
+      "M88 Field Cap",
+      "M88 Jacket",
+      "M88 Jacket - Rolled-up",
+      "M88 Trousers",
+      "Mask (Medical)",
+      "Mask (Latex)",
+      "Mask (Ski)",
+      "Officer's Cap",
+      "Panamka",
+      "Paper Bag",
+      "Polo",
+      "Pullover",
+      "Robe",
+      "Runner Shoe",
+      "Sneaker",
+      "Soviet Combat Boots",
+      "Soviet Pilot Jacket",
+      "Soviet Pilot Pants",
+      "Suit Jacket",
+      "Suit Pants",
+      "Sweater",
+      "Sweat Pants",
+      "TShirt",
+      "US Combat Boots",
+      "Veshmeshok Backpack",
+      "Wool Hat",
+    ],
+    "HQ Components": [
+      "Ammo (HQ)",
+      "Attachment Part (HQ)",
+      "Component (HQ)",
+      "Engine Part (HQ)",
+      "Interior Part (HQ)",
+      "Kevlar",
+      "Mechanical Component (HQ)",
+      "Rotor (HQ)",
+      "Stabilizer (HQ)",
+      "Weapon Part (HQ)",
+    ],
+    Components: [
+      "Cloth",
+      "Iron Plate",
+      "Component",
+      "Tempered Glass",
+      "Weapon Part",
+      "Stabilizer",
+      "Attachment Part",
+      "Ammo",
+      "Mechanical Component",
+      "Engine Part",
+      "Interior Part",
+      "Rotor",
+    ],
+  };
+
+  const craftingLevels: CraftingLevels = {
+    // ========== WEAPONS ==========
+    "AK-74": 8,
+    "AKS-74U": 8,
+    "CheyTac M200 Intervention": 13,
+    "Colt 1911": 10,
+    "Desert Eagle": 8,
+    M16A2: 5,
+    "M16A2 - AUTO": 6,
+    "M16 Carbine": 6,
+    "M21 SWS": 7,
+    "M249 SAW": 11,
+    M416: 7,
+    M9: 3,
+    "MP 43 1C": 8,
+    MP5A2: 5,
+    MP7A2: 5,
+    PKM: 12,
+    PM: 2,
+    "RPK-74": 10,
+    "Sa-58P": 9,
+    "Sa-58V": 9,
+    "Scar-H": 10,
+    "SIG MCX": 7,
+    "SIG MCX SPEAR": 10,
+    "SSG10A2-Sniper": 10,
+    "Steyr AUG": 6,
+    "SR-25 Rifle": 10,
+    SVD: 10,
+
+    // ========== MAGAZINES ==========
+    "30rnd 9x19 Mag": 5,
+    "8rnd .45 ACP": 4,
+    "9x18mm 8rnd PM Mag": 2,
+    "9x19mm 15rnd M9 Mag": 3,
+    ".300 Blackout Mag": 7,
+    ".338 5rnd FMJ": 10,
+    ".50 AE 7rnd Mag": 9,
+    "12/70 7mm Buckshot": 7,
+    "4.6x40 40rnd Mag": 5,
+    "5.45x39mm 30rnd AK Mag": 8,
+    "5.45x39mm 45rnd RPK-74 Tracer Mag": 10,
+    "5.56x45mm 30rnd AUG Mag": 6,
+    "5.56x45mm 30rnd STANAG Mag": 5,
+    "5.56x45mm 200rnd M249 Belt": 11,
+    "7Rnd M200 Magazine": 10,
+    "7.62x39mm 30rnd Sa-58 Mag": 9,
+    "7.62x51mm FMJ": 11,
+    "7.62x51mm 20rnd M14 Mag": 7,
+    "7.62x51mm 30rnd Mag": 11,
+    "SR25 7.62x51mm 20rnd": 11,
+    "7.62x54mmR 100rnd PK Belt": 12,
+    "7.62x54mmR 10rnd SVD Sniper Mag": 10,
+    "SPEAR 6.8x51 25rnd": 9,
+
+    // ========== ATTACHMENTS ==========
+    "4x20 Carry Handle Scope": 5,
+    "4.7mm FlashHider": 2,
+    "6.8x51mm FlashHider": 4,
+    "6P20 Muzzle Brake": 4,
+    "6P26 Flash Hider": 4,
+    "7.62x51mm FlashHider": 5,
+    "A2 Flash Hider": 3,
+    "ART II Scope": 7,
+    "Carry Handle Red-Dot-Sight": 7,
+    "EOTECH XPS3": 3,
+    "Elcan Specter": 7,
+    "Leupold VX-6": 10,
+    "PSO-1 Scope": 7,
+    "Reflex Scope": 2,
+
+    // ========== VEHICLES ==========
+    "M1025 Light Armoured Vehicle": 7,
+    "M151A2 Off-Road": 4,
+    "M151A2 Off-Road Open Top": 4,
+    "M923A1 Fuel Truck": 8,
+    "M923A1 Transport Truck": 7,
+    "M923A1 Transport Truck - Canopy": 8,
+    "M998 Light Utility Vehicle": 6,
+    "M998 Light Utility Vehicle - Canopy": 8,
+    "Mi-8MT Transport Helicopter": 12,
+    "Pickup-Truck": 7,
+    "S105 Car": 4,
+    "S1203 Minibus": 5,
+    "S1203 - Laboratory": 5,
+    "UAZ-452 Off-road": 5,
+    "UAZ-452 Off-road - Laboratory": 8,
+    "UAZ-469 Off-road": 3,
+    "UAZ-469 Off-road - Open Top": 3,
+    "UH-1H Transport Helicopter": 11,
+    "Ural-4320 Fuel Truck": 9,
+    "Ural-4320 Transport Truck": 9,
+    "Ural-4320 Transport Truck - Canopy": 10,
+    "Ural (Device)": 13,
+    "VW Rolf": 7,
+
+    // ========== VESTS ==========
+    "6B2 Vest": 7,
+    "6B3 Vest": 9,
+    "M69 Vest": 7,
+    "PASGT Vest": 7,
+
+    // ========== HELMETS ==========
+    "PASGT Helmet": 4,
+    "PASGT Helmet - Camouflaged": 4,
+    "PASGT Helmet - Camouflaged Netting": 4,
+    "SPH-4 Helmet": 6,
+    "SSh-68 Helmet": 4,
+    "SSh-68 Helmet - Camouflaged": 4,
+    "SSh-68 Helmet - Cover": 4,
+    "SSh-68 Helmet - KZS": 4,
+    "SSh-68 Helmet - Netting": 4,
+    "ZSh-5 Helmet": 6,
+
+    // ========== CLOTHES ==========
+    "ALICE Medium Backpack": 4,
+    Bandana: 3,
+    Balaclava: 3,
+    "BDU Blouse": 2,
+    "BDU Blouse - Rolled-up": 2,
+    "BDU Trousers": 2,
+    Beanie: 4,
+    Boonie: 4,
+    "Cap - All Variants": 2,
+    "Cargo Pants": 3,
+    "Cargo Pants (Colored)": 4,
+    Cardigan: 3,
+    "Classic Shoe": 4,
+    "CWU-27 Pilot Coveralls": 6,
+    Dress: 5,
+    Fedora: 3,
+    "Fisher Hat": 3,
+    "Flat Cap": 3,
+    "Half Mask": 3,
+    "Hunting Vest": 3,
+    "IIFS Large Combat Field Pack": 7,
+    Jacket: 4,
+    Jeans: 3,
+    "Jeans (Colored)": 4,
+    "KLMK Coveralls": 6,
+    "Knit Cap": 1,
+    "Kolobok Backpack": 2,
+    "M70 Backpack": 5,
+    "M70 Cap": 3,
+    "M70 Parka": 3,
+    "M70 Trousers": 3,
+    "M88 Field Cap": 2,
+    "M88 Jacket": 1,
+    "M88 Jacket - Rolled-up": 1,
+    "M88 Trousers": 1,
+    "Mask (Medical)": 5,
+    "Mask (Latex)": 5,
+    "Mask (Ski)": 3,
+    "Officer's Cap": 7,
+    Panamka: 2,
+    "Paper Bag": 5,
+    Polo: 4,
+    Pullover: 4,
+    Robe: 5,
+    "Runner Shoe": 4,
+    Sneaker: 4,
+    "Soviet Combat Boots": 1,
+    "Soviet Pilot Jacket": 6,
+    "Soviet Pilot Pants": 6,
+    "Suit Jacket": 7,
+    "Suit Pants": 7,
+    Sweater: 3,
+    "Sweat Pants": 4,
+    TShirt: 4,
+    "US Combat Boots": 1,
+    "Veshmeshok Backpack": 3,
+    "Wool Hat": 5,
+  };
+
+  const storageOptions: StorageOptions = {
+    vehicles: {
+      "M1025 Light Armored Vehicle": 18,
+      "M151A2 Off-Road": 16,
+      "M151A2 Off-Road - Open Top": 16,
+      "M998 Light Utility Vehicle": 18,
+      "M998 Light Utility Vehicle - Canopy": 18,
+      "M923A1 Fuel Truck": { canisters: 53 },
+      "M923A1 Transport Truck": 50,
+      "M923A1 Transport Truck - Canopy": 83,
+      "Pickup Truck": 18,
+      "UAZ-452 Off-Road": 28,
+      "UAZ-452 Off-Road - Laboratory": { canisters: 110 },
+      "UAZ-452 Off-Road - Banana": 28,
+      "UAZ-469 Off-Road": 13,
+      "UAZ-469 Off-Road - Open Top": 13,
+      "Ural-4320 Fuel Truck": { canisters: 83 },
+      "EVENT | Ural-4320 Fuel Truck": { canisters: 98 },
+      "Ural-4320 Transport Truck": 100,
+      "Ural-4320 Transport Truck - Canopy": 116,
+      "EVENT | Ural-4320 Transport Truck - Canopy": 128,
+      "VW Rolf": 18,
+      "S105 Car": 18,
+      "S1203 Minibus": 18,
+      "MI8-MT Transport Helicopter": 26,
+      "UH-1H Transport Helicopter": 26,
+    },
+    backpacks: {
+      "ALICE Medium Backpack": 13,
+      "IIFS Large Combat Field Pack": 19,
+      "Kolobok Backpack": 10,
+      "M70 Backpack": 13,
+      "Veshmeshok Backpack": 6,
+    },
+  };
+
+  const itemComponents: ItemComponents = {
+    Weapons: {
+      "AK-74": {
+        HQ: {
+          "Weapon Part (HQ)": 2,
+          "Stabilizer (HQ)": 2,
+          "Attachment Part (HQ)": 2,
+        },
+      },
+      "AKS-74U": {
+        HQ: {
+          "Weapon Part (HQ)": 1,
+          "Stabilizer (HQ)": 1,
+          "Attachment Part (HQ)": 1,
+        },
+      },
+      "CheyTac M200 Intervention": {
+        HQ: {
+          "Weapon Part (HQ)": 4,
+          "Stabilizer (HQ)": 4,
+          "Attachment Part (HQ)": 5,
+          "Special Gun Barrel": 1,
+        },
+      },
+      "Colt 1911": {
+        "Non-HQ": {
+          "Weapon Part": 5,
+          Stabilizer: 3,
+          "Attachment Part": 3,
+        },
+      },
+      "Desert Eagle": {
+        "Non-HQ": {
+          "Weapon Part": 13,
+          Stabilizer: 7,
+          "Attachment Part": 8,
+        },
+      },
+      M16A2: {
+        "Non-HQ": {
+          "Weapon Part": 27,
+          Stabilizer: 15,
+          "Attachment Part": 17,
+        },
+      },
+      "M16A2 - AUTO": {
+        "Non-HQ": {
+          "Weapon Part": 29,
+          Stabilizer: 16,
+          "Attachment Part": 18,
+        },
+      },
+      "M16 Carbine": {
+        "Non-HQ": {
+          "Weapon Part": 29,
+          Stabilizer: 16,
+          "Attachment Part": 18,
+        },
+      },
+      "M21 SWS": {
+        "Non-HQ": {
+          "Weapon Part": 39,
+          Stabilizer: 21,
+          "Attachment Part": 24,
+        },
+      },
+      "M249 SAW": {
+        HQ: {
+          "Weapon Part (HQ)": 9,
+          "Stabilizer (HQ)": 9,
+          "Attachment Part (HQ)": 11,
+          "Special Gun Barrel": 1,
+        },
+      },
+      M416: {
+        "Non-HQ": {
+          "Weapon Part": 34,
+          Stabilizer: 19,
+          "Attachment Part": 21,
+        },
+      },
+      M9: {
+        "Non-HQ": {
+          "Weapon Part": 5,
+          Stabilizer: 3,
+          "Attachment Part": 3,
+        },
+      },
+      "MP 43 1C": {
+        HQ: {
+          "Weapon Part (HQ)": 1,
+          "Stabilizer (HQ)": 1,
+          "Attachment Part (HQ)": 1,
+        },
+      },
+      MP5A2: {
+        "Non-HQ": {
+          "Weapon Part": 15,
+          Stabilizer: 8,
+          "Attachment Part": 9,
+        },
+      },
+      MP7A2: {
+        "Non-HQ": {
+          "Weapon Part": 15,
+          Stabilizer: 8,
+          "Attachment Part": 9,
+        },
+      },
+      PKM: {
+        HQ: {
+          "Weapon Part (HQ)": 12,
+          "Stabilizer (HQ)": 12,
+          "Attachment Part (HQ)": 15,
+          "Special Gun Barrel": 1,
+        },
+      },
+      PM: {
+        "Non-HQ": {
+          "Weapon Part": 4,
+          Stabilizer: 2,
+          "Attachment Part": 2,
+        },
+      },
+      "RPK-74": {
+        HQ: {
+          "Weapon Part (HQ)": 2,
+          "Stabilizer (HQ)": 2,
+          "Attachment Part (HQ)": 3,
+        },
+      },
+      "Sa-58V": {
+        HQ: {
+          "Weapon Part (HQ)": 2,
+          "Stabilizer (HQ)": 2,
+          "Attachment Part (HQ)": 2,
+        },
+      },
+      "Sa-58P": {
+        HQ: {
+          "Weapon Part (HQ)": 2,
+          "Stabilizer (HQ)": 2,
+          "Attachment Part (HQ)": 2,
+        },
+      },
+      "Scar-H": {
+        HQ: {
+          "Weapon Part (HQ)": 2,
+          "Stabilizer (HQ)": 2,
+          "Attachment Part (HQ)": 3,
+        },
+      },
+      "SIG MCX": {
+        "Non-HQ": {
+          "Weapon Part": 38,
+          Stabilizer: 20,
+          "Attachment Part": 23,
+        },
+      },
+      "SIG MCX SPEAR": {
+        HQ: {
+          "Weapon Part (HQ)": 2,
+          "Stabilizer (HQ)": 2,
+          "Attachment Part (HQ)": 3,
+        },
+      },
+      "SSG10A2-Sniper": {
+        HQ: {
+          "Weapon Part (HQ)": 2,
+          "Stabilizer (HQ)": 2,
+          "Attachment Part (HQ)": 3,
+        },
+      },
+      "Steyr AUG": {
+        "Non-HQ": {
+          "Weapon Part": 33,
+          Stabilizer: 18,
+          "Attachment Part": 20,
+        },
+      },
+      "SR-25 Rifle": {
+        HQ: {
+          "Weapon Part (HQ)": 2,
+          "Stabilizer (HQ)": 2,
+          "Attachment Part (HQ)": 3,
+        },
+      },
+      SVD: {
+        HQ: {
+          "Weapon Part (HQ)": 6,
+          "Stabilizer (HQ)": 6,
+          "Attachment Part (HQ)": 7,
+        },
+      },
+    },
+    Magazines: {
+      ".300 Blackout Mag": {
+        "Non-HQ": { Ammo: 2 },
+      },
+      ".338 5rnd FMJ": {
+        "Non-HQ": { Ammo: 2 },
+      },
+      ".50 AE 7rnd Mag": {
+        HQ: { "Ammo (HQ)": 2 },
+      },
+      "12/70 7mm Buckshot": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "30rnd 9x19 Mag": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "4.6x40 40rnd Mag": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "7Rnd M200 Magazine": {
+        HQ: { "Ammo (HQ)": 3 },
+      },
+      "7.62x39mm 30rnd Sa-58 Mag": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "7.62x51mm 20rnd M14 Mag": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "7.62x51mm 30rnd Mag": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "SR25 7.62x51mm 20rnd": {
+        HQ: { "Ammo (HQ)": 1 },
+      },
+      "8rnd .45 ACP": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "9x18mm 8rnd PM Mag": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "9x19mm 15rnd M9 Mag": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "100rnd PK Belt": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "5.56x45mm 200rnd M249 Belt": {
+        HQ: { "Ammo (HQ)": 15 },
+      },
+      "5.56x45mm 30rnd AUG Mag": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "5.56x45mm 30rnd STANAG Mag": {
+        "Non-HQ": { Ammo: 1 },
+      },
+      "5.45x39mm 30rnd AK Mag": {
+        "Non-HQ": { Ammo: 2 },
+      },
+      "5.45x39mm 45rnd RPK-74 Tracer Mag": {
+        HQ: { "Ammo (HQ)": 1 },
+      },
+      "7.62x51mm FMJ": {
+        HQ: { "Ammo (HQ)": 1 },
+      },
+      "7.62x54mmR 100rnd PK Belt": {
+        HQ: { "Ammo (HQ)": 15 },
+      },
+      "7.62x54mmR 10rnd SVD Sniper Mag": {
+        HQ: { "Ammo (HQ)": 1 },
+      },
+      "SPEAR 6.8x51 25rnd": {
+        HQ: { "Ammo (HQ)": 1 },
+      },
+    },
+    Attachments: {
+      "4x20 Carry Handle Scope": {
+        "Non-HQ": {
+          Component: 41,
+          "Tempered Glass": 18,
+        },
+      },
+      "4.7mm FlashHider": {
+        "Non-HQ": { Component: 1 },
+      },
+      "6.8x51mm FlashHider": {
+        "Non-HQ": {
+          Component: 2,
+          "Tempered Glass": 1,
+        },
+      },
+      "6P20 Muzzle Brake": {
+        "Non-HQ": {
+          Component: 2,
+          "Tempered Glass": 1,
+        },
+      },
+      "6P26 Flash Hider": {
+        "Non-HQ": {
+          Component: 2,
+          "Tempered Glass": 1,
+        },
+      },
+      "7.62x51mm FlashHider": {
+        "Non-HQ": {
+          Component: 3,
+          "Tempered Glass": 1,
+        },
+      },
+      "A2 Flash Hider": {
+        "Non-HQ": {
+          Component: 2,
+          "Tempered Glass": 1,
+        },
+      },
+      "ART II Scope": {
+        "Non-HQ": {
+          Component: 2,
+          "Tempered Glass": 1,
+        },
+      },
+      "Carry Handle Red-Dot-Sight": {
+        "Non-HQ": {
+          Component: 5,
+          "Tempered Glass": 2,
+        },
+      },
+      "EOTECH XPS3": {
+        "Non-HQ": {
+          Component: 2,
+          "Tempered Glass": 1,
+        },
+      },
+      "Elcan Specter": {
+        "Non-HQ": {
+          Component: 11,
+          "Tempered Glass": 5,
+        },
+      },
+      "Leupold VX-6": {
+        "Non-HQ": {
+          Component: 17,
+          "Tempered Glass": 8,
+        },
+      },
+      "PSO-1 Scope": {
+        "Non-HQ": {
+          Component: 4,
+          "Tempered Glass": 1,
+        },
+      },
+      "Reflex Scope": {
+        "Non-HQ": {
+          Component: 2,
+          "Tempered Glass": 1,
+        },
+      },
+    },
+    Vehicles: {
+      "M1025 Light Armoured Vehicle": {
+        "Non-HQ": {
+          "Mechanical Component": 9,
+          "Interior Part": 5,
+          "Engine Part": 9,
+        },
+      },
+      "M151A2 Off-Road": {
+        "Non-HQ": {
+          "Mechanical Component": 1,
+          "Engine Part": 1,
+        },
+      },
+      "M151A2 Off-Road Open Top": {
+        "Non-HQ": {
+          "Mechanical Component": 1,
+          "Engine Part": 1,
+        },
+      },
+      "M923A1 Fuel Truck": {
+        HQ: {
+          "Mechanical Component (HQ)": 1,
+          "Interior Part (HQ)": 1,
+          "Engine Part (HQ)": 1,
+        },
+      },
+      "M923A1 Transport Truck": {
+        "Non-HQ": {
+          "Mechanical Component": 31,
+          "Interior Part": 19,
+          "Engine Part": 31,
+        },
+      },
+      "M923A1 Transport Truck - Canopy": {
+        HQ: {
+          "Mechanical Component (HQ)": 2,
+          "Interior Part (HQ)": 2,
+          "Engine Part (HQ)": 1,
+        },
+      },
+      "M998 Light Utility Vehicle": {
+        "Non-HQ": {
+          "Mechanical Component": 5,
+          "Interior Part": 3,
+          "Engine Part": 5,
+        },
+      },
+      "M998 Light Utility Vehicle - Canopy": {
+        "Non-HQ": {
+          "Mechanical Component": 6,
+          "Interior Part": 4,
+          "Engine Part": 4,
+        },
+      },
+      "Mi-8MT Transport Helicopter": {
+        HQ: {
+          "Mechanical Component (HQ)": 30,
+          "Interior Part (HQ)": 27,
+          "Engine Part (HQ)": 19,
+          "Rotor (HQ)": 48,
+          "Special Rotor": 1,
+        },
+      },
+      "Pickup-Truck": {
+        "Non-HQ": {
+          "Mechanical Component": 19,
+          "Interior Part": 11,
+          "Engine Part": 19,
+        },
+      },
+      "S105 Car": {
+        "Non-HQ": {
+          "Mechanical Component": 3,
+          "Interior Part": 2,
+          "Engine Part": 3,
+        },
+      },
+      "S1203 - Laboratory": {
+        "Non-HQ": {
+          "Mechanical Component": 41,
+          "Interior Part": 25,
+          "Engine Part": 41,
+        },
+      },
+      "S1203 Minibus": {
+        "Non-HQ": {
+          "Mechanical Component": 7,
+          "Interior Part": 4,
+          "Engine Part": 7,
+        },
+      },
+      "UAZ-452 Off-road": {
+        "Non-HQ": {
+          "Mechanical Component": 3,
+          "Interior Part": 2,
+          "Engine Part": 3,
+        },
+      },
+      "UAZ-452 Off-road - Laboratory": {
+        HQ: {
+          "Mechanical Component (HQ)": 4,
+          "Interior Part (HQ)": 3,
+          "Engine Part (HQ)": 2,
+        },
+      },
+      "UAZ-469 Off-road": {
+        "Non-HQ": {
+          "Mechanical Component": 1,
+          "Interior Part": 1,
+          "Engine Part": 1,
+        },
+      },
+      "UAZ-469 Off-road - Open Top": {
+        "Non-HQ": {
+          "Mechanical Component": 1,
+          "Interior Part": 1,
+          "Engine Part": 1,
+        },
+      },
+      "UH-1H Transport Helicopter": {
+        HQ: {
+          "Mechanical Component (HQ)": 19,
+          "Interior Part (HQ)": 17,
+          "Engine Part (HQ)": 12,
+          "Rotor (HQ)": 30,
+          "Special Rotor": 1,
+        },
+      },
+      "Ural-4320 Fuel Truck": {
+        HQ: {
+          "Mechanical Component (HQ)": 4,
+          "Interior Part (HQ)": 3,
+          "Engine Part (HQ)": 2,
+        },
+      },
+      "Ural-4320 Transport Truck": {
+        HQ: {
+          "Mechanical Component (HQ)": 4,
+          "Interior Part (HQ)": 3,
+          "Engine Part (HQ)": 2,
+        },
+      },
+      "Ural-4320 Transport Truck - Canopy": {
+        HQ: {
+          "Mechanical Component (HQ)": 5,
+          "Interior Part (HQ)": 5,
+          "Engine Part (HQ)": 3,
+        },
+      },
+      "Ural (Device)": {
+        HQ: {
+          "Mechanical Component (HQ)": 29,
+          "Interior Part (HQ)": 26,
+          "Engine Part (HQ)": 18,
+        },
+      },
+      "VW Rolf": {
+        "Non-HQ": {
+          "Mechanical Component": 31,
+          "Interior Part": 19,
+          "Engine Part": 31,
+        },
+      },
+    },
+    Vests: {
+      "6B2 Vest": {
+        "Non-HQ": {
+          "Iron Plate": 10,
+          Cloth: 14,
+        },
+      },
+      "6B3 Vest": {
+        HQ: { Kevlar: 7 },
+      },
+      "M69 Vest": {
+        "Non-HQ": {
+          "Iron Plate": 10,
+          Cloth: 14,
+        },
+      },
+      "PASGT Vest": {
+        "Non-HQ": {
+          "Iron Plate": 10,
+          Cloth: 14,
+        },
+      },
+    },
+    Helmets: {
+      "PASGT Helmet": {
+        "Non-HQ": {
+          "Iron Plate": 2,
+          Cloth: 2,
+        },
+      },
+      "PASGT Helmet - Camouflaged": {
+        "Non-HQ": {
+          "Iron Plate": 2,
+          Cloth: 2,
+        },
+      },
+      "PASGT Helmet - Camouflaged Netting": {
+        "Non-HQ": {
+          "Iron Plate": 2,
+          Cloth: 2,
+        },
+      },
+      "SPH-4 Helmet": {
+        "Non-HQ": {
+          "Iron Plate": 7,
+          Cloth: 10,
+        },
+      },
+      "SSh-68 Helmet": {
+        "Non-HQ": {
+          "Iron Plate": 2,
+          Cloth: 2,
+        },
+      },
+      "SSh-68 Helmet - Camouflaged": {
+        "Non-HQ": {
+          "Iron Plate": 2,
+          Cloth: 2,
+        },
+      },
+      "SSh-68 Helmet - Cover": {
+        "Non-HQ": {
+          "Iron Plate": 2,
+          Cloth: 2,
+        },
+      },
+      "SSh-68 Helmet - KZS": {
+        "Non-HQ": {
+          "Iron Plate": 2,
+          Cloth: 2,
+        },
+      },
+      "SSh-68 Helmet - Netting": {
+        "Non-HQ": {
+          "Iron Plate": 2,
+          Cloth: 2,
+        },
+      },
+      "ZSh-5 Helmet": {
+        "Non-HQ": {
+          "Iron Plate": 7,
+          Cloth: 10,
+        },
+      },
+    },
+    Clothes: {
+      "ALICE Medium Backpack": {
+        "Non-HQ": { Cloth: 2 },
+      },
+      Bandana: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      Balaclava: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "BDU Blouse": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "BDU Blouse - Rolled-up": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "BDU Trousers": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      Beanie: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      Boonie: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Cap - All Variants": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Cargo Pants": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Cargo Pants (Colored)": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      Cardigan: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Classic Shoe": {
+        "Non-HQ": { Cloth: 2 },
+      },
+      "CWU-27 Pilot Coveralls": {
+        "Non-HQ": { Cloth: 20 },
+      },
+      Dress: {
+        "Non-HQ": { Cloth: 3 },
+      },
+      Fedora: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Fisher Hat": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Flat Cap": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Half Mask": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Hunting Vest": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "IIFS Large Combat Field Pack": {
+        "Non-HQ": { Cloth: 32 },
+      },
+      Jacket: {
+        "Non-HQ": { Cloth: 2 },
+      },
+      Jeans: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Jeans (Colored)": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "KLMK Coveralls": {
+        "Non-HQ": { Cloth: 20 },
+      },
+      "Knit Cap": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Kolobok Backpack": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "M70 Backpack": {
+        "Non-HQ": { Cloth: 2 },
+      },
+      "M70 Cap": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "M70 Parka": {
+        "Non-HQ": { Cloth: 2 },
+      },
+      "M70 Trousers": {
+        "Non-HQ": { Cloth: 2 },
+      },
+      "M88 Field Cap": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "M88 Jacket": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "M88 Jacket - Rolled-up": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "M88 Trousers": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Mask (Medical)": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Mask (Latex)": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Mask (Ski)": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Officer's Cap": {
+        "Non-HQ": { Cloth: 64 },
+      },
+      Panamka: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Paper Bag": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      Polo: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      Pullover: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      Robe: {
+        "Non-HQ": { Cloth: 7 },
+      },
+      "Runner Shoe": {
+        "Non-HQ": { Cloth: 2 },
+      },
+      Sneaker: {
+        "Non-HQ": { Cloth: 4 },
+      },
+      "Soviet Combat Boots": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Soviet Pilot Jacket": {
+        "Non-HQ": { Cloth: 11 },
+      },
+      "Soviet Pilot Pants": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Suit Jacket": {
+        "Non-HQ": { Cloth: 61 },
+      },
+      "Suit Pants": {
+        "Non-HQ": { Cloth: 50 },
+      },
+      Sweater: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Sweat Pants": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      TShirt: {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "US Combat Boots": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Veshmeshok Backpack": {
+        "Non-HQ": { Cloth: 1 },
+      },
+      "Wool Hat": {
+        "Non-HQ": { Cloth: 50 },
+      },
+    },
+    "HQ Components": {
+      "Ammo (HQ)": {
+        Resources: { Petrol: 1 },
+        "Non-HQ": { Ammo: 3 },
+      },
+      "Attachment Part (HQ)": {
+        Resources: { "Wooden Plank": 15 },
+        "Non-HQ": { "Attachment Part": 3 },
+      },
+      "Component (HQ)": {
+        Resources: { "Gold Ingot": 15 },
+        "Non-HQ": { Component: 2 },
+      },
+      "Engine Part (HQ)": {
+        Resources: { "Copper Ingot": 45, Petrol: 45 },
+        "Non-HQ": { "Engine Part": 9 },
+      },
+      "Interior Part (HQ)": {
+        Resources: { "Wooden Plank": 45 },
+        "Non-HQ": { "Interior Part": 9 },
+      },
+      "Mechanical Component (HQ)": {
+        Resources: { "Gold Ingot": 45 },
+        "Non-HQ": { "Mechanical Component": 9 },
+      },
+      "Rotor (HQ)": {
+        Resources: { "Silver Ingot": 30 },
+        "Non-HQ": { Rotor: 9 },
+      },
+      "Stabilizer (HQ)": {
+        Resources: { Polyester: 15 },
+        "Non-HQ": { Stabilizer: 3 },
+      },
+      "Weapon Part (HQ)": {
+        Resources: { "Iron Ingot": 15, "Copper Ingot": 15 },
+        "Non-HQ": { "Weapon Part": 3 },
+      },
+      Kevlar: {
+        Resources: { "Iron Plate": 1, "Iron Ingot": 20 },
+      },
+    },
+    Components: {
+      Cloth: {
+        Resources: { Fabric: 1, Polyester: 1 },
+      },
+      "Iron Plate": {
+        Resources: { "Iron Ingot": 1, Fabric: 1, Polyester: 1 },
+      },
+      Component: {
+        Resources: { "Iron Ingot": 1, "Copper Ingot": 1 },
+      },
+      "Tempered Glass": {
+        Resources: { Glass: 2, Polyester: 1 },
+      },
+      "Weapon Part": {
+        Resources: { "Iron Ingot": 1, "Copper Ingot": 1 },
+      },
+      Stabilizer: {
+        Resources: { "Iron Ingot": 2, "Gold Ingot": 1 },
+      },
+      "Attachment Part": {
+        Resources: { "Copper Ingot": 2, "Silver Ingot": 1 },
+      },
+      Ammo: {
+        Resources: { "Iron Ingot": 1, Charcoal: 1 },
+      },
+      "Mechanical Component": {
+        Resources: { "Iron Ingot": 2, "Copper Ingot": 2 },
+      },
+      "Engine Part": {
+        Resources: { "Iron Ingot": 1, "Copper Ingot": 1, Petrol: 1 },
+      },
+      "Interior Part": {
+        Resources: { Fabric: 2, Polyester: 2 },
+      },
+      Rotor: {
+        Resources: { Charcoal: 1, Polyester: 1 },
+      },
+    },
+  };
+
+  const componentResources: ComponentResources = {
+    Ammo: { "Iron Ingot": 1, Charcoal: 1 },
+    "Attachment Part": { "Copper Ingot": 2, "Silver Ingot": 1 },
+    Cloth: { Fabric: 1, Polyester: 1 },
+    Component: { "Iron Ingot": 1, "Copper Ingot": 1 },
+    "Engine Part": { "Iron Ingot": 1, "Copper Ingot": 1, Petrol: 1 },
+    "Interior Part": { Fabric: 2, Polyester: 2 },
+    "Iron Plate": { "Iron Ingot": 1, Fabric: 1, Polyester: 1 },
+    Kevlar: { "Iron Plate": 1, "Iron Ingot": 20 },
+    "Mechanical Component": { "Iron Ingot": 2, "Copper Ingot": 2 },
+    Rotor: { Charcoal: 1, Polyester: 1 },
+    Stabilizer: { "Iron Ingot": 2, "Gold Ingot": 1 },
+    "Tempered Glass": { Glass: 2, Polyester: 1 },
+    "Weapon Part": { "Iron Ingot": 1, "Copper Ingot": 1 },
+    "Ammo (HQ)": { Ammo: 3, Petrol: 1 },
+    "Attachment Part (HQ)": { "Attachment Part": 3, "Wooden Plank": 15 },
+    "Component (HQ)": { Component: 2, "Gold Ingot": 15 },
+    "Engine Part (HQ)": { "Engine Part": 9, "Copper Ingot": 45, Petrol: 45 },
+    "Interior Part (HQ)": { "Interior Part": 9, "Wooden Plank": 45 },
     "Mechanical Component (HQ)": {
-      Resources: { "Gold Ingot": 45 },
-      "Non-HQ": { "Mechanical Component": 9 }
+      "Mechanical Component": 9,
+      "Gold Ingot": 45,
     },
-    "Rotor (HQ)": {
-      Resources: { "Silver Ingot": 30 },
-      "Non-HQ": { "Rotor": 9 }
-    },
-    "Stabilizer (HQ)": {
-      Resources: { "Polyester": 15 },
-      "Non-HQ": { "Stabilizer": 3 }
-    },
+    "Rotor (HQ)": { Rotor: 9, "Silver Ingot": 30 },
+    "Stabilizer (HQ)": { Stabilizer: 3, Polyester: 15 },
     "Weapon Part (HQ)": {
-      Resources: { "Iron Ingot": 15, "Copper Ingot": 15 },
-      "Non-HQ": { "Weapon Part": 3 }
+      "Weapon Part": 3,
+      "Iron Ingot": 15,
+      "Copper Ingot": 15,
     },
-    "Kevlar": {
-      Resources: { "Iron Plate": 1, "Iron Ingot": 20 }
-    }
-  },
-  Components: {
-    "Cloth": {
-      Resources: { "Fabric": 1, "Polyester": 1 }
-    },
-    "Iron Plate": {
-      Resources: { "Iron Ingot": 1, "Fabric": 1, "Polyester": 1 }
-    },
-    "Component": {
-      Resources: { "Iron Ingot": 1, "Copper Ingot": 1 }
-    },
-    "Tempered Glass": {
-      Resources: { "Glass": 2, "Polyester": 1 }
-    },
-    "Weapon Part": {
-      Resources: { "Iron Ingot": 1, "Copper Ingot": 1 }
-    },
-    "Stabilizer": {
-      Resources: { "Iron Ingot": 2, "Gold Ingot": 1 }
-    },
-    "Attachment Part": {
-      Resources: { "Copper Ingot": 2, "Silver Ingot": 1 }
-    },
-    "Ammo": {
-      Resources: { "Iron Ingot": 1, "Charcoal": 1 }
-    },
-    "Mechanical Component": {
-      Resources: { "Iron Ingot": 2, "Copper Ingot": 2 }
-    },
-    "Engine Part": {
-      Resources: { "Iron Ingot": 1, "Copper Ingot": 1, "Petrol": 1 }
-    },
-    "Interior Part": {
-      Resources: { "Fabric": 2, "Polyester": 2 }
-    },
-    "Rotor": {
-      Resources: { "Charcoal": 1, "Polyester": 1 }
-    }
-  }
-};
+    "Special Rotor": { "Special Rotor": 1 },
+    "Special Gun Barrel": { "Special Gun Barrel": 1 },
+  };
 
-const componentResources: ComponentResources = {
-  "Ammo": { "Iron Ingot": 1, "Charcoal": 1 },
-  "Attachment Part": { "Copper Ingot": 2, "Silver Ingot": 1 },
-  "Cloth": { "Fabric": 1, "Polyester": 1 },
-  "Component": { "Iron Ingot": 1, "Copper Ingot": 1 },
-  "Engine Part": { "Iron Ingot": 1, "Copper Ingot": 1, "Petrol": 1 },
-  "Interior Part": { "Fabric": 2, "Polyester": 2 },
-  "Iron Plate": { "Iron Ingot": 1, "Fabric": 1, "Polyester": 1 },
-  "Kevlar": { "Iron Plate": 1, "Iron Ingot": 20 },
-  "Mechanical Component": { "Iron Ingot": 2, "Copper Ingot": 2 },
-  "Rotor": { "Charcoal": 1, "Polyester": 1 },
-  "Stabilizer": { "Iron Ingot": 2, "Gold Ingot": 1 },
-  "Tempered Glass": { "Glass": 2, "Polyester": 1 },
-  "Weapon Part": { "Iron Ingot": 1, "Copper Ingot": 1 },
-  "Ammo (HQ)": { "Ammo": 3, "Petrol": 1 },
-  "Attachment Part (HQ)": { "Attachment Part": 3, "Wooden Plank": 15 },
-  "Component (HQ)": { "Component": 2, "Gold Ingot": 15 },
-  "Engine Part (HQ)": { "Engine Part": 9, "Copper Ingot": 45, "Petrol": 45 },
-  "Interior Part (HQ)": { "Interior Part": 9, "Wooden Plank": 45 },
-  "Mechanical Component (HQ)": {
-    "Mechanical Component": 9,
-    "Gold Ingot": 45
-  },
-  "Rotor (HQ)": { "Rotor": 9, "Silver Ingot": 30 },
-  "Stabilizer (HQ)": { "Stabilizer": 3, "Polyester": 15 },
-  "Weapon Part (HQ)": {
-    "Weapon Part": 3,
-    "Iron Ingot": 15,
-    "Copper Ingot": 15
-  },
-  "Special Rotor": { "Special Rotor": 1 },
-  "Special Gun Barrel": { "Special Gun Barrel": 1 }
-};
+  const resourcesList: string[] = [
+    "Fabric",
+    "Polyester",
+    "Iron Ingot",
+    "Copper Ingot",
+    "Glass",
+    "Component",
+    "Charcoal",
+    "Gold Ingot",
+    "Silver Ingot",
+    "Petrol",
+    "Wooden Plank",
+  ];
 
-const resourcesList: string[] = [
-  "Fabric",
-  "Polyester",
-  "Iron Ingot",
-  "Copper Ingot",
-  "Glass",
-  "Component",
-  "Charcoal",
-  "Gold Ingot",
-  "Silver Ingot",
-  "Petrol",
-  "Wooden Plank"
-];
+  // Crafting times in seconds
+  const craftingTimes: CraftingTimes = {
+    // Base Components (seconds per unit)
+    Cloth: 10,
+    "Iron Plate": 10,
+    Component: 10,
+    "Tempered Glass": 10,
+    "Weapon Part": 10,
+    Stabilizer: 10,
+    "Attachment Part": 10,
+    Ammo: 10,
+    "Mechanical Component": 10,
+    "Engine Part": 10,
+    "Interior Part": 10,
+    Rotor: 10,
 
-// Crafting times in seconds
-const craftingTimes: CraftingTimes = {
-  // Base Components (seconds per unit)
-  "Cloth": 10,
-  "Iron Plate": 10,
-  "Component": 10,
-  "Tempered Glass": 10,
-  "Weapon Part": 10,
-  "Stabilizer": 10,
-  "Attachment Part": 10,
-  "Ammo": 10,
-  "Mechanical Component": 10,
-  "Engine Part": 10,
-  "Interior Part": 10,
-  "Rotor": 10,
+    // HQ Components (seconds per unit)
+    "Component (HQ)": 10,
+    Kevlar: 10,
+    "Weapon Part (HQ)": 10,
+    "Stabilizer (HQ)": 10,
+    "Attachment Part (HQ)": 10,
+    "Ammo (HQ)": 10,
+    "Mechanical Component (HQ)": 10,
+    "Engine Part (HQ)": 10,
+    "Interior Part (HQ)": 10,
+    "Rotor (HQ)": 10,
 
-  // HQ Components (seconds per unit)
-  "Component (HQ)": 10,
-  "Kevlar": 10,
-  "Weapon Part (HQ)": 10,
-  "Stabilizer (HQ)": 10,
-  "Attachment Part (HQ)": 10,
-  "Ammo (HQ)": 10,
-  "Mechanical Component (HQ)": 10,
-  "Engine Part (HQ)": 10,
-  "Interior Part (HQ)": 10,
-  "Rotor (HQ)": 10,
+    // Weapons
+    "AK-74": 70,
+    "AKS-74U": 70,
+    "CheyTac M200 Intervention": 70,
+    "Colt 1911": 50,
+    "Desert Eagle": 50,
+    M16A2: 50,
+    "M16A2 - AUTO": 50,
+    "M16 Carbine": 50,
+    "M21 SWS": 50,
+    "M249 SAW": 120,
+    M416: 50,
+    M9: 50,
+    "MP 43 1C": 70,
+    MP5A2: 50,
+    MP7A2: 50,
+    PKM: 130,
+    PM: 50,
+    "RPK-74": 70,
+    "Sa-58P": 70,
+    "Sa-58V": 70,
+    "Scar-H": 70,
+    "SIG MCX": 50,
+    "SIG MCX SPEAR": 70,
+    "SSG10A2-Sniper": 70,
+    "Steyr AUG": 50,
+    "SR-25 Rifle": 70,
+    SVD: 90,
 
-  // Weapons
-  "AK-74": 70,
-  "AKS-74U": 70,
-  "CheyTac M200 Intervention": 70,
-  "Colt 1911": 50,
-  "Desert Eagle": 50,
-  "M16A2": 50,
-  "M16A2 - AUTO": 50,
-  "M16 Carbine": 50,
-  "M21 SWS": 50,
-  "M249 SAW": 120,
-  "M416": 50,
-  "M9": 50,
-  "MP 43 1C": 70,
-  "MP5A2": 50,
-  "MP7A2": 50,
-  "PKM": 130,
-  "PM": 50,
-  "RPK-74": 70,
-  "Sa-58P": 70,
-  "Sa-58V": 70,
-  "Scar-H": 70,
-  "SIG MCX": 50,
-  "SIG MCX SPEAR": 70,
-  "SSG10A2-Sniper": 70,
-  "Steyr AUG": 50,
-  "SR-25 Rifle": 70,
-  "SVD": 90,
+    // Magazines
+    "30rnd 9x19 Mag": 20,
+    "8rnd .45 ACP": 20,
+    "9x18mm 8rnd PM Mag": 20,
+    "9x19mm 15rnd M9 Mag": 20,
+    ".300 Blackout Mag": 20,
+    ".338 5rnd FMJ": 20,
+    ".50 AE 7rnd Mag": 30,
+    "12/70 7mm Buckshot": 20,
+    "4.6x40 40rnd Mag": 20,
+    "5.45x39mm 30rnd AK Mag": 20,
+    "5.45x39mm 45rnd RPK-74 Tracer Mag": 30,
+    "5.56x45mm 30rnd AUG Mag": 20,
+    "5.56x45mm 30rnd STANAG Mag": 20,
+    "5.56x45mm 200rnd M249 Belt": 30,
+    "7Rnd M200 Magazine": 30,
+    "7.62x39mm 30rnd Sa-58 Mag": 20,
+    "7.62x51mm FMJ": 30,
+    "7.62x51mm 20rnd M14 Mag": 20,
+    "7.62x51mm 30rnd Mag": 20,
+    "SR25 7.62x51mm 20rnd": 30,
+    "7.62x54mmR 100rnd PK Belt": 30,
+    "7.62x54mmR 10rnd SVD Sniper Mag": 30,
+    "SPEAR 6.8x51 25rnd": 30,
 
-  // Magazines
-  "30rnd 9x19 Mag": 20,
-  "8rnd .45 ACP": 20,
-  "9x18mm 8rnd PM Mag": 20,
-  "9x19mm 15rnd M9 Mag": 20,
-  ".300 Blackout Mag": 20,
-  ".338 5rnd FMJ": 20,
-  ".50 AE 7rnd Mag": 30,
-  "12/70 7mm Buckshot": 20,
-  "4.6x40 40rnd Mag": 20,
-  "5.45x39mm 30rnd AK Mag": 20,
-  "5.45x39mm 45rnd RPK-74 Tracer Mag": 30,
-  "5.56x45mm 30rnd AUG Mag": 20,
-  "5.56x45mm 30rnd STANAG Mag": 20,
-  "5.56x45mm 200rnd M249 Belt": 30,
-  "7Rnd M200 Magazine": 30,
-  "7.62x39mm 30rnd Sa-58 Mag": 20,
-  "7.62x51mm FMJ": 30,
-  "7.62x51mm 20rnd M14 Mag": 20,
-  "7.62x51mm 30rnd Mag": 20,
-  "SR25 7.62x51mm 20rnd": 30,
-  "7.62x54mmR 100rnd PK Belt": 30,
-  "7.62x54mmR 10rnd SVD Sniper Mag": 30,
-  "SPEAR 6.8x51 25rnd": 30,
+    // Attachments
+    "4x20 Carry Handle Scope": 50,
+    "4.7mm FlashHider": 30,
+    "6.8x51mm FlashHider": 50,
+    "6P20 Muzzle Brake": 50,
+    "6P26 Flash Hider": 50,
+    "7.62x51mm FlashHider": 50,
+    "A2 Flash Hider": 50,
+    "ART II Scope": 50,
+    "Carry Handle Red-Dot-Sight": 50,
+    "EOTECH XPS3": 50,
+    "Elcan Specter": 50,
+    "Leupold VX-6": 50,
+    "PSO-1 Scope": 50,
+    "Reflex Scope": 50,
 
-  // Attachments
-  "4x20 Carry Handle Scope": 50,
-  "4.7mm FlashHider": 30,
-  "6.8x51mm FlashHider": 50,
-  "6P20 Muzzle Brake": 50,
-  "6P26 Flash Hider": 50,
-  "7.62x51mm FlashHider": 50,
-  "A2 Flash Hider": 50,
-  "ART II Scope": 50,
-  "Carry Handle Red-Dot-Sight": 50,
-  "EOTECH XPS3": 50,
-  "Elcan Specter": 50,
-  "Leupold VX-6": 50,
-  "PSO-1 Scope": 50,
-  "Reflex Scope": 50,
+    // Vehicles
+    "M1025 Light Armoured Vehicle": 60,
+    "M151A2 Off-Road": 40,
+    "M151A2 Off-Road Open Top": 40,
+    "M923A1 Fuel Truck": 80,
+    "M923A1 Transport Truck": 60,
+    "M923A1 Transport Truck - Canopy": 80,
+    "M998 Light Utility Vehicle": 60,
+    "M998 Light Utility Vehicle - Canopy": 60,
+    "Mi-8MT Transport Helicopter": 850,
+    "Pickup-Truck": 60,
+    "S105 Car": 60,
+    "S1203 Minibus": 60,
+    "S1203 - Laboratory": 80,
+    "UAZ-452 Off-road": 60,
+    "UAZ-452 Off-road - Laboratory": 110,
+    "UAZ-469 Off-road": 60,
+    "UAZ-469 Off-road - Open Top": 60,
+    "UH-1H Transport Helicopter": 550,
+    "Ural-4320 Fuel Truck": 110,
+    "Ural-4320 Transport Truck": 110,
+    "Ural-4320 Transport Truck - Canopy": 140,
+    "Ural (Device)": 620,
+    "VW Rolf": 60,
 
-  // Vehicles
-  "M1025 Light Armoured Vehicle": 60,
-  "M151A2 Off-Road": 40,
-  "M151A2 Off-Road Open Top": 40,
-  "M923A1 Fuel Truck": 80,
-  "M923A1 Transport Truck": 60,
-  "M923A1 Transport Truck - Canopy": 80,
-  "M998 Light Utility Vehicle": 60,
-  "M998 Light Utility Vehicle - Canopy": 60,
-  "Mi-8MT Transport Helicopter": 850,
-  "Pickup-Truck": 60,
-  "S105 Car": 60,
-  "S1203 Minibus": 60,
-  "S1203 - Laboratory": 80,
-  "UAZ-452 Off-road": 60,
-  "UAZ-452 Off-road - Laboratory": 110,
-  "UAZ-469 Off-road": 60,
-  "UAZ-469 Off-road - Open Top": 60,
-  "UH-1H Transport Helicopter": 550,
-  "Ural-4320 Fuel Truck": 110,
-  "Ural-4320 Transport Truck": 110,
-  "Ural-4320 Transport Truck - Canopy": 140,
-  "Ural (Device)": 620,
-  "VW Rolf": 60,
+    // Vests
+    "6B2 Vest": 40,
+    "6B3 Vest": 40,
+    "M69 Vest": 40,
+    "PASGT Vest": 40,
 
-  // Vests
-  "6B2 Vest": 40,
-  "6B3 Vest": 40,
-  "M69 Vest": 40,
-  "PASGT Vest": 40,
+    // Helmets
+    "PASGT Helmet": 40,
+    "PASGT Helmet - Camouflaged": 40,
+    "PASGT Helmet - Camouflaged Netting": 40,
+    "SPH-4 Helmet": 40,
+    "SSh-68 Helmet": 40,
+    "SSh-68 Helmet - Camouflaged": 40,
+    "SSh-68 Helmet - Cover": 40,
+    "SSh-68 Helmet - KZS": 40,
+    "SSh-68 Helmet - Netting": 40,
+    "ZSh-5 Helmet": 40,
 
-  // Helmets
-  "PASGT Helmet": 40,
-  "PASGT Helmet - Camouflaged": 40,
-  "PASGT Helmet - Camouflaged Netting": 40,
-  "SPH-4 Helmet": 40,
-  "SSh-68 Helmet": 40,
-  "SSh-68 Helmet - Camouflaged": 40,
-  "SSh-68 Helmet - Cover": 40,
-  "SSh-68 Helmet - KZS": 40,
-  "SSh-68 Helmet - Netting": 40,
-  "ZSh-5 Helmet": 40,
-
-  // Clothing
-  "ALICE Medium Backpack": 40,
-  "Bandana": 20,
-  "Balaclava": 20,
-  "BDU Blouse": 20,
-  "BDU Blouse - Rolled-up": 20,
-  "BDU Trousers": 20,
-  "Beanie": 20,
-  "Boonie": 20,
-  "Cap - All Variants": 20,
-  "Cargo Pants": 20,
-  "Cargo Pants (Colored)": 20,
-  "Cardigan": 20,
-  "Classic Shoe": 20,
-  "CWU-27 Pilot Coveralls": 20,
-  "Dress": 20,
-  "Fedora": 20,
-  "Fisher Hat": 20,
-  "Flat Cap": 20,
-  "Half Mask": 20,
-  "Hunting Vest": 20,
-  "IIFS Large Combat Field Pack": 20,
-  "Jacket": 20,
-  "Jeans": 20,
-  "Jeans (Colored)": 20,
-  "KLMK Coveralls": 20,
-  "Knit Cap": 20,
-  "Kolobok Backpack": 20,
-  "M70 Backpack": 20,
-  "M70 Cap": 20,
-  "M70 Parka": 20,
-  "M70 Trousers": 20,
-  "M88 Field Cap": 20,
-  "M88 Jacket": 20,
-  "M88 Jacket - Rolled-up": 20,
-  "M88 Trousers": 20,
-  "Mask (Medical)": 20,
-  "Mask (Latex)": 20,
-  "Mask (Ski)": 20,
-  "Officer's Cap": 20,
-  "Panamka": 20,
-  "Paper Bag": 20,
-  "Polo": 20,
-  "Pullover": 20,
-  "Robe": 20,
-  "Runner Shoe": 20,
-  "Sneaker": 20,
-  "Soviet Combat Boots": 20,
-  "Soviet Pilot Jacket": 20,
-  "Soviet Pilot Pants": 20,
-  "Suit Jacket": 20,
-  "Suit Pants": 20,
-  "Sweater": 20,
-  "Sweat Pants": 20,
-  "TShirt": 20,
-  "US Combat Boots": 20,
-  "Veshmeshok Backpack": 20,
-  "Wool Hat": 20
-};
+    // Clothing
+    "ALICE Medium Backpack": 40,
+    Bandana: 20,
+    Balaclava: 20,
+    "BDU Blouse": 20,
+    "BDU Blouse - Rolled-up": 20,
+    "BDU Trousers": 20,
+    Beanie: 20,
+    Boonie: 20,
+    "Cap - All Variants": 20,
+    "Cargo Pants": 20,
+    "Cargo Pants (Colored)": 20,
+    Cardigan: 20,
+    "Classic Shoe": 20,
+    "CWU-27 Pilot Coveralls": 20,
+    Dress: 20,
+    Fedora: 20,
+    "Fisher Hat": 20,
+    "Flat Cap": 20,
+    "Half Mask": 20,
+    "Hunting Vest": 20,
+    "IIFS Large Combat Field Pack": 20,
+    Jacket: 20,
+    Jeans: 20,
+    "Jeans (Colored)": 20,
+    "KLMK Coveralls": 20,
+    "Knit Cap": 20,
+    "Kolobok Backpack": 20,
+    "M70 Backpack": 20,
+    "M70 Cap": 20,
+    "M70 Parka": 20,
+    "M70 Trousers": 20,
+    "M88 Field Cap": 20,
+    "M88 Jacket": 20,
+    "M88 Jacket - Rolled-up": 20,
+    "M88 Trousers": 20,
+    "Mask (Medical)": 20,
+    "Mask (Latex)": 20,
+    "Mask (Ski)": 20,
+    "Officer's Cap": 20,
+    Panamka: 20,
+    "Paper Bag": 20,
+    Polo: 20,
+    Pullover: 20,
+    Robe: 20,
+    "Runner Shoe": 20,
+    Sneaker: 20,
+    "Soviet Combat Boots": 20,
+    "Soviet Pilot Jacket": 20,
+    "Soviet Pilot Pants": 20,
+    "Suit Jacket": 20,
+    "Suit Pants": 20,
+    Sweater: 20,
+    "Sweat Pants": 20,
+    TShirt: 20,
+    "US Combat Boots": 20,
+    "Veshmeshok Backpack": 20,
+    "Wool Hat": 20,
+  };
 
   // Redirect if no access
   useEffect(() => {
@@ -1958,196 +2097,196 @@ const craftingTimes: CraftingTimes = {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background-primary via-background-secondary to-background-primary">
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          {/* App Container */}
-          <div className="bg-background-secondary/80 backdrop-blur-lg border border-white/5 rounded-2xl p-8 shadow-2xl">
-            {/* Title Bar */}
-            <div className="flex justify-between items-center mb-8 flex-wrap">
-              <h1 className="text-3xl font-bold text-primary-500 flex items-center">
-                Crafting Calculator
-                <span className="ml-2 text-xs bg-primary-500 text-black px-1.5 py-0.5 rounded font-bold">
-                  v2
+    <div className="container mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto">
+        {/* App Container - Mobile optimized padding */}
+        <div className="bg-background-secondary/80 backdrop-blur-lg border border-white/5 rounded-2xl p-4 sm:p-6 lg:p-8 shadow-2xl">
+          {/* Title Bar - Mobile optimized typography */}
+          <div className="flex justify-between items-center mb-6 sm:mb-8 flex-wrap gap-4">
+            <h1 className="text-2xl sm:text-3xl font-bold text-primary-500 flex items-center flex-wrap">
+              Crafting Calculator
+              <span className="ml-2 text-xs bg-primary-500 text-black px-1.5 py-0.5 rounded font-bold">
+                v2
+              </span>
+            </h1>
+          </div>
+
+            {/* Form Section - Mobile optimized spacing */}
+          <div className="space-y-4 sm:space-y-6">
+            {/* Show All Blueprints Toggle */}
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="showAllToggle"
+                className="text-white/90 font-medium"
+              >
+                Show All Blueprints:
+              </label>
+              <label className="relative inline-block w-12 h-6">
+                <input
+                  type="checkbox"
+                  id="showAllToggle"
+                  checked={showAllBlueprints}
+                  onChange={(e) => setShowAllBlueprints(e.target.checked)}
+                  className="opacity-0 w-0 h-0"
+                />
+                <span
+                  className={`absolute cursor-pointer top-0 left-0 right-0 bottom-0 rounded-full transition-all duration-300 ${
+                    showAllBlueprints ? "bg-primary-500" : "bg-gray-600"
+                  }`}
+                >
+                  <span
+                    className={`absolute h-4 w-4 rounded-full bg-white transition-all duration-300 top-1 ${
+                      showAllBlueprints ? "left-7" : "left-1"
+                    }`}
+                  ></span>
                 </span>
-              </h1>
+              </label>
             </div>
 
-            {/* Form Section */}
-            <div className="space-y-6">
-              {/* Show All Blueprints Toggle */}
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="showAllToggle"
-                  className="text-white/90 font-medium"
-                >
-                  Show All Blueprints:
-                </label>
-                <label className="relative inline-block w-12 h-6">
-                  <input
-                    type="checkbox"
-                    id="showAllToggle"
-                    checked={showAllBlueprints}
-                    onChange={(e) => setShowAllBlueprints(e.target.checked)}
-                    className="opacity-0 w-0 h-0"
-                  />
-                  <span
-                    className={`absolute cursor-pointer top-0 left-0 right-0 bottom-0 rounded-full transition-all duration-300 ${
-                      showAllBlueprints ? "bg-primary-500" : "bg-gray-600"
-                    }`}
-                  >
-                    <span
-                      className={`absolute h-4 w-4 rounded-full bg-white transition-all duration-300 top-1 ${
-                        showAllBlueprints ? "left-7" : "left-1"
-                      }`}
-                    ></span>
-                  </span>
-                </label>
-              </div>
+              {/* Category Selection - Mobile optimized input */}
+            <div>
+              <label
+                htmlFor="categories"
+                className="block text-white/90 font-medium mb-2"
+              >
+                Select Category:
+              </label>
+              <select
+                id="categories"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none text-base"
+              >
+                <option value="--">--</option>
+                {Object.keys(itemsByCategory).map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              {/* Category Selection */}
-              <div>
-                <label
-                  htmlFor="categories"
-                  className="block text-white/90 font-medium mb-2"
-                >
-                  Select Category:
-                </label>
+            {/* Item Selection - Mobile responsive layout */}
+            <div>
+              <label
+                htmlFor="items"
+                className="block text-white/90 font-medium mb-2"
+              >
+                Select Item:
+              </label>
+              <div className="flex flex-col md:flex-row gap-4">
                 <select
-                  id="categories"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none"
+                  id="items"
+                  value={selectedItem}
+                  onChange={(e) => setSelectedItem(e.target.value)}
+                  disabled={selectedCategory === "--"}
+                  className="flex-1 min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none disabled:opacity-50 text-base"
                 >
-                  <option value="--">--</option>
-                  {Object.keys(itemsByCategory).map((category) => (
-                    <option key={category} value={category}>
-                      {category}
+                  <option value="">Choose an item...</option>
+                  {availableItems.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
                     </option>
                   ))}
                 </select>
+                <div className="flex items-center justify-center md:justify-start md:px-4 py-2 md:py-0 font-semibold text-white/90">
+                  Crafting Level:{" "}
+                  {selectedItem
+                    ? craftingLevels[selectedItem] ?? "N/A"
+                    : "N/A"}
+                </div>
               </div>
+            </div>
 
-              {/* Item Selection */}
-              <div>
-                <label
-                  htmlFor="items"
-                  className="block text-white/90 font-medium mb-2"
-                >
-                  Select Item:
-                </label>
-                <div className="flex gap-4">
-                  <select
-                    id="items"
-                    value={selectedItem}
-                    onChange={(e) => setSelectedItem(e.target.value)}
-                    disabled={selectedCategory === "--"}
-                    className="flex-1 p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none disabled:opacity-50"
+              {/* Quantity - Mobile optimized input */}
+            <div>
+              <label
+                htmlFor="quantity"
+                className="block text-white/90 font-medium mb-2"
+              >
+                Quantity:
+              </label>
+              <input
+                type="number"
+                id="quantity"
+                min="1"
+                value={quantity}
+                onChange={(e) =>
+                  setQuantity(Math.max(1, parseInt(e.target.value) || 1))
+                }
+                className="w-full min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none text-base"
+              />
+            </div>
+
+              {/* Transport Kit - Mobile responsive grid */}
+            <div>
+              <h3 className="text-lg sm:text-xl text-primary-500 font-semibold mb-4">
+                Your Transport Kit
+              </h3>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                <div>
+                  <label
+                    htmlFor="vehicleSelect"
+                    className="block text-white/90 font-medium mb-2"
                   >
-                    <option value="">Choose an item...</option>
-                    {availableItems.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
+                    Select Transport Vehicle:
+                  </label>
+                  <select
+                    id="vehicleSelect"
+                    value={selectedVehicle}
+                    onChange={(e) => setSelectedVehicle(e.target.value)}
+                    className="w-full min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none text-base"
+                  >
+                    <option value="">-- Select Vehicle --</option>
+                    {Object.keys(storageOptions.vehicles).map((vehicle) => (
+                      <option key={vehicle} value={vehicle}>
+                        {vehicle}
                       </option>
                     ))}
                   </select>
-                  <div className="flex items-center px-4 font-semibold text-white/90">
-                    Crafting Level:{" "}
-                    {selectedItem
-                      ? craftingLevels[selectedItem] ?? "N/A"
-                      : "N/A"}
-                  </div>
                 </div>
-              </div>
 
-              {/* Quantity */}
-              <div>
-                <label
-                  htmlFor="quantity"
-                  className="block text-white/90 font-medium mb-2"
-                >
-                  Quantity:
-                </label>
-                <input
-                  type="number"
-                  id="quantity"
-                  min="1"
-                  value={quantity}
-                  onChange={(e) =>
-                    setQuantity(Math.max(1, parseInt(e.target.value) || 1))
-                  }
-                  className="w-full p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none"
-                />
-              </div>
-
-              {/* Transport Kit */}
-              <div>
-                <h3 className="text-primary-500 text-xl font-semibold mb-4">
-                  Your Transport Kit
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      htmlFor="vehicleSelect"
-                      className="block text-white/90 font-medium mb-2"
-                    >
-                      Select Transport Vehicle:
-                    </label>
-                    <select
-                      id="vehicleSelect"
-                      value={selectedVehicle}
-                      onChange={(e) => setSelectedVehicle(e.target.value)}
-                      className="w-full p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none"
-                    >
-                      <option value="">-- Select Vehicle --</option>
-                      {Object.keys(storageOptions.vehicles).map((vehicle) => (
-                        <option key={vehicle} value={vehicle}>
-                          {vehicle}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="backpackSelect"
-                      className="block text-white/90 font-medium mb-2"
-                    >
-                      Select Backpack:
-                    </label>
-                    <select
-                      id="backpackSelect"
-                      value={selectedBackpack}
-                      onChange={(e) => setSelectedBackpack(e.target.value)}
-                      className="w-full p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none"
-                    >
-                      <option value="">-- Select Backpack --</option>
-                      {Object.keys(storageOptions.backpacks).map((backpack) => (
-                        <option key={backpack} value={backpack}>
-                          {backpack}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div>
+                  <label
+                    htmlFor="backpackSelect"
+                    className="block text-white/90 font-medium mb-2"
+                  >
+                    Select Backpack:
+                  </label>
+                  <select
+                    id="backpackSelect"
+                    value={selectedBackpack}
+                    onChange={(e) => setSelectedBackpack(e.target.value)}
+                    className="w-full min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none text-base"
+                  >
+                    <option value="">-- Select Backpack --</option>
+                    {Object.keys(storageOptions.backpacks).map((backpack) => (
+                      <option key={backpack} value={backpack}>
+                        {backpack}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button
-                  onClick={calculateResources}
-                  className="w-full p-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 transition-all duration-200 transform hover:scale-105"
-                >
-                  Calculate Materials
-                </button>
-                <button
-                  onClick={addToKit}
-                  className="w-full p-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 transition-all duration-200 transform hover:scale-105"
-                >
-                  Add to Kit
-                </button>
               </div>
             </div>
+
+              {/* Action Buttons - Mobile optimized sizing */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button
+                onClick={calculateResources}
+                className="w-full min-h-[44px] px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 transition-all duration-200 text-base"
+              >
+                Calculate Materials
+              </button>
+              <button
+                onClick={addToKit}
+                className="w-full min-h-[44px] px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 transition-all duration-200 text-base"
+              >
+                Add to Kit
+              </button>
+            </div>
+          </div>
 
             {/* Results */}
             {results && (
@@ -2305,7 +2444,7 @@ const craftingTimes: CraftingTimes = {
 
             {/* Footer */}
             <div className="text-center mt-8 text-white/50">
-              <p>Updated | June 14, 2025</p>
+              <p>Updated | June 24, 2025</p>
             </div>
           </div>
         </div>

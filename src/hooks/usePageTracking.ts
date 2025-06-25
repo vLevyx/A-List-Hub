@@ -12,6 +12,7 @@ export function usePageTracking() {
   const supabase = createClient()
   const sessionIdRef = useRef<string | null>(null)
   const lastPageRef = useRef<string | null>(null)
+  const heartbeatInterval = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -70,6 +71,9 @@ export function usePageTracking() {
               is_active: false
             })
             .eq('id', sessionIdRef.current)
+          
+          // Clear the session reference
+          sessionIdRef.current = null
         } catch (error) {
           console.error('Error ending page session:', error)
         }
@@ -81,10 +85,27 @@ export function usePageTracking() {
         try {
           await supabase
             .from('page_sessions')
-            .update({ is_active: true })
+            .update({ 
+              is_active: true,
+              // Update enter_time to prevent stale sessions
+              enter_time: new Date().toISOString()
+            })
             .eq('id', sessionIdRef.current)
         } catch (error) {
           console.error('Error marking as active:', error)
+        }
+      }
+    }
+
+    const markAsInactive = async () => {
+      if (sessionIdRef.current) {
+        try {
+          await supabase
+            .from('page_sessions')
+            .update({ is_active: false })
+            .eq('id', sessionIdRef.current)
+        } catch (error) {
+          console.error('Error marking as inactive:', error)
         }
       }
     }
@@ -94,22 +115,21 @@ export function usePageTracking() {
 
     // Handle visibility changes
     const handleVisibilityChange = () => {
-  if (document.visibilityState === 'hidden') {
-    if (sessionIdRef.current) {
-      Promise.resolve(
-        supabase
-          .from('page_sessions')
-          .update({ is_active: false })
-          .eq('id', sessionIdRef.current)
-      )
-        .then(() => {})
-        .catch(console.error)
+      if (document.visibilityState === 'hidden') {
+        markAsInactive()
+        // Clear heartbeat when tab is hidden
+        if (heartbeatInterval.current) {
+          clearInterval(heartbeatInterval.current)
+          heartbeatInterval.current = null
+        }
+      } else if (document.visibilityState === 'visible') {
+        markAsActive()
+        // Restart heartbeat when tab becomes visible
+        if (!heartbeatInterval.current) {
+          heartbeatInterval.current = setInterval(markAsActive, 30000)
+        }
+      }
     }
-  } else if (document.visibilityState === 'visible') {
-    markAsActive()
-  }
-}
-
 
     // Handle page unload
     const handleBeforeUnload = () => {
@@ -118,17 +138,28 @@ export function usePageTracking() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('beforeunload', handleBeforeUnload)
+    
+    // Also handle page hide event for better mobile support
+    window.addEventListener('pagehide', handleBeforeUnload)
 
-    // Activity heartbeat
-    const activityInterval = setInterval(markAsActive, 30000)
+    // Activity heartbeat - only start if page is visible
+    if (document.visibilityState === 'visible') {
+      heartbeatInterval.current = setInterval(markAsActive, 30000)
+    }
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      clearInterval(activityInterval)
+      window.removeEventListener('pagehide', handleBeforeUnload)
+      
+      if (heartbeatInterval.current) {
+        clearInterval(heartbeatInterval.current)
+        heartbeatInterval.current = null
+      }
+      
       endPageSession()
     }
-  }, [user, pathname])
+  }, [user, pathname, supabase])
 
   // Handle route changes
   useEffect(() => {
@@ -175,5 +206,5 @@ export function usePageTracking() {
     if (lastPageRef.current !== pathname) {
       startNewSession()
     }
-  }, [pathname, user])
+  }, [pathname, user, supabase])
 }

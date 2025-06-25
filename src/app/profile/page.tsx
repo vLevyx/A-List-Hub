@@ -993,6 +993,7 @@ export default function ProfilePage() {
             </div>
           ) : (
             <>
+
               {/* Blueprint Categories */}
               <div className="space-y-4 mb-8">
                 {Object.entries(itemsByCategory).map(([category, items]) => {
@@ -1011,46 +1012,60 @@ export default function ProfilePage() {
                         </span>
                       </summary>
 
-                      <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {/* Responsive grid with proper spacing */}
+                      <div className="p-4 grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {items.map((item) => (
-                          <div
+                          <label
                             key={item}
-                            className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/[0.05] rounded-lg hover:bg-white/[0.04] hover:border-[#00c6ff]/20 transition-all"
+                            className="flex items-center p-3 sm:p-4 bg-white/[0.02] border border-white/[0.05] rounded-lg hover:bg-white/[0.04] hover:border-[#00c6ff]/20 transition-all min-h-[3.5rem] sm:min-h-[4rem] cursor-pointer select-none active:scale-[0.98] sm:active:scale-[0.99]"
+                            htmlFor={`blueprint-${item}`}
                           >
-                            <div className="text-[#e8e8e8] text-sm font-medium pr-4 break-words">
+                            {/* Hidden checkbox for form control */}
+                            <input
+                              id={`blueprint-${item}`}
+                              type="checkbox"
+                              className="sr-only"
+                              checked={
+                                selectedBlueprints.has(item) ||
+                                isDefaultCategory
+                              }
+                              onChange={() => handleBlueprintToggle(item)}
+                              disabled={isDefaultCategory}
+                            />
+
+                            {/* Item text - takes available space, responsive text size */}
+                            <div className="flex-1 text-[#e8e8e8] text-xs sm:text-sm font-medium pr-3 sm:pr-4 break-words leading-tight">
                               {item}
                             </div>
 
-                            <label className="relative inline-block w-13 h-7 flex-shrink-0">
-                              <input
-                                type="checkbox"
-                                className="opacity-0 w-0 h-0"
-                                checked={
-                                  selectedBlueprints.has(item) ||
-                                  isDefaultCategory
-                                }
-                                onChange={() => handleBlueprintToggle(item)}
-                                disabled={isDefaultCategory}
-                              />
-                              <span
-                                className={`absolute cursor-pointer top-0 left-0 right-0 bottom-0 ${
-                                  selectedBlueprints.has(item) ||
-                                  isDefaultCategory
-                                    ? "bg-gradient-to-r from-[#00c6ff] to-[#0072ff] border-[#00c6ff]"
-                                    : "bg-white/10 border-white/20"
-                                } rounded-full border transition-all duration-300`}
-                              >
+                            {/* Toggle container - responsive sizing, always centered */}
+                            <div className="flex items-center justify-center flex-shrink-0 pointer-events-none">
+                              <div className="relative inline-block w-10 h-5 sm:w-12 sm:h-6">
+                                {/* Toggle track - responsive sizing */}
                                 <span
-                                  className={`absolute w-5 h-5 bg-white rounded-full top-1 left-1 transition-transform duration-300 ${
+                                  className={`absolute inset-0 rounded-full transition-all duration-300 border ${
                                     selectedBlueprints.has(item) ||
                                     isDefaultCategory
-                                      ? "translate-x-6"
-                                      : ""
+                                      ? "bg-gradient-to-r from-[#00c6ff] to-[#0072ff] border-[#00c6ff]"
+                                      : "bg-white/10 border-white/20"
                                   }`}
-                                />
-                              </span>
-                            </label>
-                          </div>
+                                >
+                                  {/* Toggle slider - responsive sizing and positioning */}
+                                  <span
+                                    className={`absolute bg-white rounded-full transition-transform duration-300 ${
+                                      selectedBlueprints.has(item) ||
+                                      isDefaultCategory
+                                        ? "translate-x-5 sm:translate-x-6"
+                                        : "translate-x-0"
+                                    } ${
+                                      // Responsive slider dimensions - perfectly centered
+                                      "w-3.5 h-3.5 sm:w-4 sm:h-4 top-1/2 left-0.5 sm:left-1 -translate-y-1/2"
+                                    }`}
+                                  />
+                                </span>
+                              </div>
+                            </div>
+                          </label>
                         ))}
                       </div>
                     </details>

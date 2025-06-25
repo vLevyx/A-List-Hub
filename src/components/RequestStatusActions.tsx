@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getUsername } from "@/lib/utils";
 
 export type RequestStatus = "pending" | "claimed" | "completed" | "cancelled";
 
@@ -37,11 +38,19 @@ export function RequestStatusActions({
     setMessage("");
 
     try {
+      // Get current user session to extract username
+      const { data: sessionData } = await supabase.auth.getSession();
+      const user = sessionData.session?.user;
+      
+      // Get username instead of Discord ID for claimed_by field
+      const claimedByValue = newStatus === "claimed" 
+        ? claimedBy || getUsername(user) // Use username instead of userDiscordId
+        : undefined;
+
       const updateData = {
         requestId,
         newStatus,
-        claimedBy:
-          newStatus === "claimed" ? claimedBy || userDiscordId : undefined,
+        claimedBy: claimedByValue,
       };
 
       // Call the status update edge function
@@ -50,11 +59,7 @@ export function RequestStatusActions({
         {
           body: updateData,
           headers: {
-            Authorization: `Bearer ${
-              (
-                await supabase.auth.getSession()
-              ).data.session?.access_token
-            }`,
+            Authorization: `Bearer ${sessionData.session?.access_token}`,
           },
         }
       );
@@ -78,34 +83,34 @@ export function RequestStatusActions({
   };
 
   // Check if user is admin/middleman
-const [isMiddleman, setIsMiddleman] = useState(false);
+  const [isMiddleman, setIsMiddleman] = useState(false);
 
-useEffect(() => {
-  const checkMiddlemanStatus = async () => {
+  useEffect(() => {
+    const checkMiddlemanStatus = async () => {
+      try {
+        // ✅ FIXED: Changed from "is_admin" to "is_middleman"
+        const { data, error } = await supabase.rpc("is_middleman");
+        if (error) throw error;
+        setIsMiddleman(data === true);
+      } catch (error) {
+        console.error('Error checking middleman status:', error);
+        setIsMiddleman(false);
+      }
+    };
+    checkMiddlemanStatus();
+  }, []);
+
+  const handleStatusUpdate = async (action: () => Promise<any>) => {
+    setIsUpdating(true);
+    setMessage("");
     try {
-      // ✅ FIXED: Changed from "is_admin" to "is_middleman"
-      const { data, error } = await supabase.rpc("is_middleman");
-      if (error) throw error;
-      setIsMiddleman(data === true);
-    } catch (error) {
-      console.error('Error checking middleman status:', error);
-      setIsMiddleman(false);
+      await action();
+    } catch (error: any) {
+      setMessage(`❌ ${error.message}`);
+    } finally {
+      setIsUpdating(false);
     }
   };
-  checkMiddlemanStatus();
-}, []);
-
-const handleStatusUpdate = async (action: () => Promise<any>) => {
-  setIsUpdating(true);
-  setMessage("");
-  try {
-    await action();
-  } catch (error: any) {
-    setMessage(`❌ ${error.message}`);
-  } finally {
-    setIsUpdating(false);
-  }
-};
 
   const claimRequest = () => updateRequestStatus("claimed");
   const completeRequest = () => updateRequestStatus("completed");
@@ -175,41 +180,33 @@ const handleStatusUpdate = async (action: () => Promise<any>) => {
     return null;
   }
 
-  const getButtonClasses = (variant: string) => {
-    const baseClasses =
-      "px-3 py-1.5 text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
-
-    switch (variant) {
-      case "primary":
-        return `${baseClasses} bg-[#00c6ff] text-black hover:bg-[#00a8d8]`;
-      case "success":
-        return `${baseClasses} bg-green-500 text-white hover:bg-green-600`;
-      case "danger":
-        return `${baseClasses} bg-red-500 text-white hover:bg-red-600`;
-      case "secondary":
-        return `${baseClasses} bg-white/10 text-white hover:bg-white/20 border border-white/20`;
-      default:
-        return `${baseClasses} bg-gray-500 text-white hover:bg-gray-600`;
-    }
-  };
-
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
         {availableActions.map((action, index) => (
           <button
             key={index}
-            onClick={() => handleStatusUpdate(action.action)}
+            onClick={action.action}
             disabled={isUpdating}
-            className={getButtonClasses(action.variant)}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              action.variant === "primary"
+                ? "bg-primary-500/20 text-primary-400 border border-primary-500/30 hover:bg-primary-500/30"
+                : action.variant === "success"
+                ? "bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30"
+                : action.variant === "danger"
+                ? "bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30"
+                : "bg-gray-500/20 text-gray-400 border border-gray-500/30 hover:bg-gray-500/30"
+            } ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
           >
-            {isUpdating ? "Updating..." : action.label}
+            {isUpdating ? "..." : action.label}
           </button>
         ))}
       </div>
-
+      
       {message && (
-        <div className="text-sm p-2 rounded bg-white/5 border border-white/10 text-white/90">
+        <div className={`text-sm ${
+          message.startsWith("✅") ? "text-green-400" : "text-red-400"
+        }`}>
           {message}
         </div>
       )}

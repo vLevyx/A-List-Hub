@@ -10,7 +10,6 @@ import { getDiscordId, getUsername } from "@/lib/utils";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { Button } from "@/components/ui/Button";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
-import { ScamListModal } from "../../components/ScamListModal";
 import { withTimeout } from "@/lib/timeout";
 
 // Constants
@@ -95,10 +94,16 @@ export default function MiddlemanMarketPage(): ReactElement {
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [requestHistory, setRequestHistory] = useState<RequestHistory[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [showScamList, setShowScamList] = useState(false);
-  const [showScamModal, setShowScamModal] = useState(false);
   const [scamList, setScamList] = useState<Scammer[]>([]);
   const [isLoadingScamList, setIsLoadingScamList] = useState(false);
+  const [claimedByNames, setClaimedByNames] = useState<Record<string, string>>(
+    {}
+  );
+  const [scamListPage, setScamListPage] = useState(0);
+  const [allScammers, setAllScammers] = useState<Scammer[]>([]);
+  const [filteredScammers, setFilteredScammers] = useState<Scammer[]>([]);
+  const [scammerSearch, setScammerSearch] = useState("");
+  const [showAllScammers, setShowAllScammers] = useState(false);
 
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -141,20 +146,77 @@ export default function MiddlemanMarketPage(): ReactElement {
     setIsLoadingHistory(true);
     try {
       const discordId = getDiscordId(user);
+      if (!discordId) return;
+
       const { data, error } = await withTimeout(
         supabase
           .from("middleman_requests")
           .select("*")
           .eq("user_discord_id", discordId)
           .order("created_at", { ascending: false })
-          .limit(5)
+          .limit(10)
       );
+
       if (error) throw error;
-      setRequestHistory(data as RequestHistory[]);
-    } catch (err) {
-      console.error("Error loading history:", err);
+
+      setRequestHistory(data || []);
+
+      // Load usernames for claimed_by fields
+      const claimedByIds = Array.from(
+        new Set(data?.filter((r) => r.claimed_by).map((r) => r.claimed_by))
+      );
+      if (claimedByIds.length > 0) {
+        await loadClaimedByNames(claimedByIds);
+      }
+    } catch (error) {
+      console.error("Error loading request history:", error);
     } finally {
       setIsLoadingHistory(false);
+    }
+  };
+
+  const loadClaimedByNames = async (discordIds: string[]) => {
+    try {
+      // Query the users table to get usernames for the provided Discord IDs
+      const { data, error } = await supabase
+        .from("users")
+        .select("discord_id, username")
+        .in("discord_id", discordIds);
+
+      if (error) {
+        console.error("Error querying users for claimed_by names:", error);
+        // Fallback to Discord IDs if query fails
+        const fallbackNames: Record<string, string> = {};
+        discordIds.forEach((id) => {
+          fallbackNames[id] = id;
+        });
+        setClaimedByNames(fallbackNames);
+        return;
+      }
+
+      // Map Discord IDs to usernames
+      const names: Record<string, string> = {};
+
+      // Create a map from the database results
+      const userMap = new Map(
+        data?.map((user) => [user.discord_id, user.username]) || []
+      );
+
+      // For each requested Discord ID, use username if available, otherwise fallback to ID
+      discordIds.forEach((id) => {
+        const username = userMap.get(id);
+        names[id] = username || id; // Fallback to Discord ID if username not found
+      });
+
+      setClaimedByNames(names);
+    } catch (error) {
+      console.error("Error loading claimed by names:", error);
+      // Fallback to Discord IDs in case of any error
+      const fallbackNames: Record<string, string> = {};
+      discordIds.forEach((id) => {
+        fallbackNames[id] = id;
+      });
+      setClaimedByNames(fallbackNames);
     }
   };
 
@@ -162,20 +224,58 @@ export default function MiddlemanMarketPage(): ReactElement {
   const loadScamList = async () => {
     setIsLoadingScamList(true);
     try {
-      const { data, error } = await withTimeout(
+      // Load recent scammers for the main display (5 most recent)
+      const { data: recentData, error: recentError } = await withTimeout(
         supabase
           .from("scam_list")
           .select("*")
           .order("created_at", { ascending: false })
-          .limit(10)
+          .limit(5)
       );
-      if (error) throw error;
-      setScamList(data as Scammer[]);
+      if (recentError) throw recentError;
+      setScamList(recentData as Scammer[]);
+
+      // Load all scammers for the "Show All" modal
+      const { data: allData, error: allError } = await withTimeout(
+        supabase
+          .from("scam_list")
+          .select("*")
+          .order("created_at", { ascending: false })
+      );
+      if (allError) throw allError;
+      setAllScammers(allData as Scammer[]);
+      setFilteredScammers(allData as Scammer[]);
     } catch (err) {
       console.error("Error loading scam list:", err);
     } finally {
       setIsLoadingScamList(false);
     }
+  };
+
+  // Add this new function for handling scammer search
+  const handleScammerSearch = (searchTerm: string) => {
+    setScammerSearch(searchTerm);
+    if (!searchTerm.trim()) {
+      setFilteredScammers(allScammers);
+      return;
+    }
+
+    const term = searchTerm.toLowerCase();
+    const filtered = allScammers.filter(
+      (scammer) =>
+        scammer.in_game_name.toLowerCase().includes(term) ||
+        (scammer.discord_name &&
+          scammer.discord_name.toLowerCase().includes(term))
+    );
+    setFilteredScammers(filtered);
+  };
+
+  // Add this function for pagination in the main list
+  const getDisplayedScammers = () => {
+    const ITEMS_PER_PAGE = 5;
+    const startIndex = scamListPage * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return scamList.slice(startIndex, endIndex);
   };
 
   // Timer helper
@@ -725,7 +825,7 @@ export default function MiddlemanMarketPage(): ReactElement {
                           <span className="text-sm font-medium text-orange-300">
                             📩 Claimed by:{" "}
                             <code className="bg-black/20 px-1 py-0.5 rounded text-xs">
-                              {req.claimed_by}
+                              {claimedByNames[req.claimed_by] || req.claimed_by}
                             </code>
                           </span>
                         </div>
@@ -832,40 +932,73 @@ export default function MiddlemanMarketPage(): ReactElement {
               </div>
             </div>
 
-            {/* Scam List */}
+            {/* Middleman Payment Information */}
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">
+                💰 Middleman Payment
+              </h3>
+              <div className="space-y-3 text-sm text-white/80">
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <span className="text-blue-400 mr-3 mt-0.5">💡</span>
+                    <div>
+                      <p className="font-medium text-blue-300 mb-2">Payment Structure</p>
+                      <p className="leading-relaxed">
+                        Middleman payment varies - each middleman can determine their own prices between <strong className="text-white">0%-10%</strong> of the sale price in cash or other compensation items.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <p className="flex items-center">
+                    <span className="text-green-400 mr-2">✓</span>
+                    Payment is discussed before trade is finalized
+                  </p>
+                  <p className="flex items-center">
+                    <span className="text-green-400 mr-2">✓</span>
+                    Can be paid in cash or agreed compensation items
+                  </p>
+                  <p className="flex items-center">
+                    <span className="text-green-400 mr-2">✓</span>
+                    Rate ranges from 0% to 10% of total sale value
+                  </p>
+                </div>
+                
+                <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <p className="text-yellow-300 text-xs">
+                    <strong>Note:</strong> Payment terms will be clearly communicated when a middleman claims your request.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Enhanced Known Scammers Section */}
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-white">
-                  Known Scammers
+                  Known Scammers ({scamList.length} recent)
                 </h3>
-                <div className="space-x-2">
-                  <button
-                    onClick={() => setShowScamList((v) => !v)}
-                    className="text-primary-400 hover:text-primary-300 text-sm"
-                  >
-                    {showScamList ? "Hide" : "Show"} List
-                  </button>
-                  <button
-                    onClick={() => setShowScamModal(true)}
-                    className="text-primary-400 hover:text-primary-300 text-sm"
-                  >
-                    Show All
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShowAllScammers(true)}
+                  className="text-primary-400 hover:text-primary-300 text-sm font-medium"
+                >
+                  Show All ({allScammers.length})
+                </button>
               </div>
 
-              {showScamList && (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {isLoadingScamList ? (
-                    <div className="flex justify-center py-4">
-                      <LoadingSpinner size="sm" />
-                    </div>
-                  ) : scamList.length === 0 ? (
-                    <p className="text-white/60 text-sm text-center py-4">
-                      No scammers reported yet
-                    </p>
-                  ) : (
-                    scamList.map((scam) => (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {isLoadingScamList ? (
+                  <div className="flex justify-center py-4">
+                    <LoadingSpinner size="sm" />
+                  </div>
+                ) : scamList.length === 0 ? (
+                  <p className="text-white/60 text-sm text-center py-4">
+                    No scammers reported yet
+                  </p>
+                ) : (
+                  <>
+                    {getDisplayedScammers().map((scam) => (
                       <div
                         key={scam.id}
                         className="bg-red-500/10 border border-red-500/20 rounded p-3"
@@ -881,11 +1014,16 @@ export default function MiddlemanMarketPage(): ReactElement {
                               </p>
                             )}
                           </div>
-                          {scam.verified && (
-                            <span className="text-red-400 text-xs">
-                              ✓ Verified
+                          <div className="flex items-center gap-2">
+                            {scam.verified && (
+                              <span className="text-red-400 text-xs">
+                                ✓ Verified
+                              </span>
+                            )}
+                            <span className="text-red-300/60 text-xs">
+                              {new Date(scam.created_at).toLocaleDateString()}
                             </span>
-                          )}
+                          </div>
                         </div>
                         {scam.description && (
                           <p className="text-white/70 text-xs mt-1">
@@ -893,19 +1031,171 @@ export default function MiddlemanMarketPage(): ReactElement {
                           </p>
                         )}
                       </div>
-                    ))
-                  )}
-                </div>
-              )}
+                    ))}
+
+                    {/* Pagination for main list */}
+                    {scamList.length > 5 && (
+                      <div className="flex justify-center items-center gap-2 pt-2">
+                        <button
+                          onClick={() =>
+                            setScamListPage(Math.max(0, scamListPage - 1))
+                          }
+                          disabled={scamListPage === 0}
+                          className="px-2 py-1 text-sm text-white/60 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          ← Prev
+                        </button>
+                        <span className="text-sm text-white/60">
+                          Page {scamListPage + 1} of{" "}
+                          {Math.ceil(scamList.length / 5)}
+                        </span>
+                        <button
+                          onClick={() =>
+                            setScamListPage(
+                              Math.min(
+                                Math.ceil(scamList.length / 5) - 1,
+                                scamListPage + 1
+                              )
+                            )
+                          }
+                          disabled={
+                            scamListPage >= Math.ceil(scamList.length / 5) - 1
+                          }
+                          className="px-2 py-1 text-sm text-white/60 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next →
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Full Scam List Modal */}
-        <ScamListModal
-          isOpen={showScamModal}
-          onClose={() => setShowScamModal(false)}
-        />
+        {/* Enhanced "Show All" Modal */}
+        {showAllScammers && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-[#1a1a1a] border border-white/10 rounded-xl max-w-4xl w-full max-h-[80vh] overflow-hidden">
+              {/* Modal Header */}
+              <div className="p-6 border-b border-white/10">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-bold text-white">
+                    All Known Scammers ({allScammers.length})
+                  </h2>
+                  <button
+                    onClick={() => setShowAllScammers(false)}
+                    className="text-white/60 hover:text-white text-xl"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search by in-game name or Discord username..."
+                    value={scammerSearch}
+                    onChange={(e) => handleScammerSearch(e.target.value)}
+                    className="w-full p-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30"
+                  />
+                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/40">
+                    🔍
+                  </span>
+                </div>
+
+                {scammerSearch && (
+                  <p className="text-sm text-white/60 mt-2">
+                    Found {filteredScammers.length} scammer(s) matching "
+                    {scammerSearch}"
+                  </p>
+                )}
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 overflow-y-auto max-h-[60vh]">
+                {filteredScammers.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-white/60">
+                      {scammerSearch
+                        ? "No scammers found matching your search."
+                        : "No scammers reported yet."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filteredScammers.map((scam) => (
+                      <div
+                        key={scam.id}
+                        className="bg-red-500/10 border border-red-500/20 rounded-lg p-4"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="text-red-400 font-medium text-lg">
+                              {scam.in_game_name}
+                            </p>
+                            {scam.discord_name && (
+                              <p className="text-red-300/80 text-sm">
+                                Discord: {scam.discord_name}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            {scam.verified && (
+                              <span className="text-red-400 text-sm font-medium">
+                                ✓ Verified
+                              </span>
+                            )}
+                            <span className="text-red-300/60 text-xs">
+                              {new Date(scam.created_at).toLocaleDateString(
+                                "en-US",
+                                {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                        {scam.description && (
+                          <div className="mt-2">
+                            <p className="text-white/50 text-xs font-medium mb-1">
+                              Description:
+                            </p>
+                            <p className="text-white/70 text-sm leading-relaxed">
+                              {scam.description}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-white/10 bg-white/5">
+                <div className="flex justify-between items-center text-sm text-white/60">
+                  <span>
+                    Showing {filteredScammers.length} of {allScammers.length}{" "}
+                    scammers
+                  </span>
+                  <button
+                    onClick={() => setShowAllScammers(false)}
+                    className="px-4 py-2 bg-primary-500/20 text-primary-400 border border-primary-500/30 rounded-lg hover:bg-primary-500/30 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -117,6 +117,16 @@ export default function AdminPage() {
   >([]);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
+  const [activeUsers, setActiveUsers] = useState<
+    {
+      discord_id: string;
+      username: string;
+      last_activity: string;
+      total_sessions: number;
+      total_time: number;
+    }[]
+  >([]);
+
   // UI state
   const [activeTab, setActiveTab] = useState("users");
   const [loadingState, setLoadingState] = useState({
@@ -290,7 +300,7 @@ export default function AdminPage() {
 
       setPageAnalytics(pageData || []);
 
-      // Get top users
+      // Get top users (this already works for analytics)
       const { data: userData, error: userError } = await withTimeout(
         supabase.rpc("get_top_users")
       );
@@ -302,7 +312,7 @@ export default function AdminPage() {
 
       setTopUsers(userData || []);
 
-      // Get online users
+      // Get online users (for green dots - last 5 minutes)
       const { data: onlineData, error: onlineError } = await withTimeout(
         supabase.rpc("get_online_users")
       );
@@ -312,7 +322,21 @@ export default function AdminPage() {
         return;
       }
 
-      setOnlineUsers(new Set(onlineData.map((user: any) => user.discord_id)));
+      setOnlineUsers(
+        new Set(onlineData?.map((user: any) => user.discord_id) || [])
+      );
+
+      // Get active users (last 24 hours) - NEW!
+      const { data: activeData, error: activeError } = await withTimeout(
+        supabase.rpc("get_active_users")
+      );
+
+      if (activeError) {
+        console.error("Error loading active users:", activeError);
+        return;
+      }
+
+      setActiveUsers(activeData || []);
     } catch (error) {
       console.error("Failed to load analytics:", error);
     } finally {
@@ -931,12 +955,7 @@ export default function AdminPage() {
   // Analytics statistics
   const analyticsStats = useMemo(() => {
     return {
-      totalUsers: Object.keys(
-        topUsers.reduce((acc, user) => {
-          acc[user.username] = true;
-          return acc;
-        }, {} as Record<string, boolean>)
-      ).length,
+      totalUsers: activeUsers.length, // Now using 24-hour active users
       totalSessions: pageAnalytics.reduce(
         (sum, page) => sum + page.sessions,
         0
@@ -948,7 +967,7 @@ export default function AdminPage() {
           : 0,
       uniquePages: pageAnalytics.length,
     };
-  }, [pageAnalytics, topUsers]);
+  }, [pageAnalytics, activeUsers]);
 
   // User analytics statistics
   const getUserAnalyticsStats = useMemo(() => {
@@ -1435,12 +1454,25 @@ export default function AdminPage() {
         {activeTab === "analytics" && (
           <div className="space-y-6">
             {/* Stats Overview */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="bg-[#1a1a1a] rounded-xl p-6 border border-white/10">
+                <div className="text-2xl font-bold text-[#00c6ff] mb-1">
+                  {onlineUsers.size}
+                </div>
+                <div className="text-sm text-white/60">Currently Online</div>
+                <div className="text-xs text-white/40 mt-1">
+                  (Last 5 minutes)
+                </div>
+              </div>
+
               <div className="bg-[#1a1a1a] rounded-xl p-6 border border-white/10">
                 <div className="text-2xl font-bold text-[#00c6ff] mb-1">
                   {analyticsStats.totalUsers}
                 </div>
                 <div className="text-sm text-white/60">Active Users</div>
+                <div className="text-xs text-white/40 mt-1">
+                  (Last 24 hours)
+                </div>
               </div>
 
               <div className="bg-[#1a1a1a] rounded-xl p-6 border border-white/10">
@@ -1466,7 +1498,7 @@ export default function AdminPage() {
             </div>
 
             {/* Top Pages and User Analytics */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
               {/* Top Pages */}
               <div className="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden">
                 <div className="bg-[#00c6ff]/10 border-b border-[#00c6ff]/20 p-4">
@@ -1531,6 +1563,108 @@ export default function AdminPage() {
                             </td>
                             <td className="p-4 text-white/80">
                               {page.sessions}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Active Users (24 Hour) */}
+              <div className="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden">
+                <div className="bg-[#00c6ff]/10 border-b border-[#00c6ff]/20 p-4">
+                  <h2 className="text-xl font-semibold text-[#00c6ff]">
+                    Active Users (Last 24 Hours)
+                  </h2>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-[#2a2a2a]">
+                      <tr>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          User
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Status
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Sessions
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Total Time
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Last Activity
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {loadingState.analytics ? (
+                        <tr>
+                          <td colSpan={5} className="p-8 text-center">
+                            <LoadingSpinner size="md" className="mx-auto" />
+                            <p className="mt-2 text-white/60">
+                              Loading active users...
+                            </p>
+                          </td>
+                        </tr>
+                      ) : activeUsers.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="p-8 text-center text-white/60"
+                          >
+                            No active users in the last 24 hours
+                          </td>
+                        </tr>
+                      ) : (
+                        activeUsers.slice(0, 20).map((user, index) => (
+                          <tr
+                            key={user.discord_id}
+                            className="hover:bg-white/5 transition-colors"
+                          >
+                            <td className="p-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-6 h-6 rounded-full bg-[#00c6ff] flex items-center justify-center text-xs font-bold text-white">
+                                  {index + 1}
+                                </div>
+                                <div>
+                                  <div className="font-medium text-white/90">
+                                    {user.username || "Unknown"}
+                                  </div>
+                                  <div className="text-xs text-white/60 font-mono">
+                                    {user.discord_id}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className={`w-2 h-2 rounded-full ${
+                                    onlineUsers.has(user.discord_id)
+                                      ? "bg-green-500"
+                                      : "bg-gray-500"
+                                  }`}
+                                ></div>
+                                <span className="text-sm">
+                                  {onlineUsers.has(user.discord_id)
+                                    ? "Online"
+                                    : "Offline"}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="p-4 text-white/80">
+                              {user.total_sessions}
+                            </td>
+                            <td className="p-4 font-medium text-white/90">
+                              {formatTime(user.total_time)}
+                            </td>
+                            <td className="p-4 text-white/80">
+                              {timeAgo(user.last_activity)}
                             </td>
                           </tr>
                         ))
