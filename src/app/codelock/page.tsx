@@ -31,7 +31,7 @@ export default function CodeLockSolverPage() {
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [autoSolveThreshold, setAutoSolveThreshold] = useState<number>(0);
-  const [highlightSolution, setHighlightSolution] = useState<boolean>(true);
+  const [highlightSolution, setHighlightSolution] = useState<boolean>(false);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
 
   // Refs

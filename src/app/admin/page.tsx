@@ -127,6 +127,9 @@ export default function AdminPage() {
     }[]
   >([]);
 
+  const [timeUnit, setTimeUnit] = useState<"m" | "h" | "d">("m"); // For Top Pages
+  const [userTimeUnit, setUserTimeUnit] = useState<"m" | "h" | "d">("m"); // For User Analytics
+
   // UI state
   const [activeTab, setActiveTab] = useState("users");
   const [loadingState, setLoadingState] = useState({
@@ -606,6 +609,25 @@ export default function AdminPage() {
     return `${minutes}m ${remainingSeconds}s`;
   };
 
+  // Enhanced formatTime function with unit selection
+  const formatTimeWithUnit = (seconds: number, unit: "m" | "h" | "d" = "m") => {
+    if (seconds === 0) return "0" + unit;
+
+    switch (unit) {
+      case "m":
+        const minutes = Math.round(seconds / 60);
+        return `${minutes}m`;
+      case "h":
+        const hours = Math.round((seconds / 3600) * 10) / 10; // Round to 1 decimal
+        return `${hours}h`;
+      case "d":
+        const days = Math.round((seconds / 86400) * 100) / 100; // Round to 2 decimals
+        return `${days}d`;
+      default:
+        return formatTime(seconds); // Fallback to original function
+    }
+  };
+
   // Add this function right after your existing formatTime function
   const formatLastLogin = (dateString: string | null) => {
     if (!dateString) return "Never";
@@ -968,6 +990,11 @@ export default function AdminPage() {
       uniquePages: pageAnalytics.length,
     };
   }, [pageAnalytics, activeUsers]);
+
+  // Sort topUsers alphabetically for dropdown
+  const sortedTopUsers = useMemo(() => {
+    return [...topUsers].sort((a, b) => a.username.localeCompare(b.username));
+  }, [topUsers]);
 
   // User analytics statistics
   const getUserAnalyticsStats = useMemo(() => {
@@ -1497,30 +1524,46 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Top Pages and User Analytics */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Top Pages */}
+            {/* Top Section: Top Pages and Active Users side by side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Top Pages by Time Spent */}
               <div className="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden">
                 <div className="bg-[#00c6ff]/10 border-b border-[#00c6ff]/20 p-4">
-                  <h2 className="text-xl font-semibold text-[#00c6ff]">
-                    Top Pages by Time Spent
-                  </h2>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <h2 className="text-xl font-semibold text-[#00c6ff]">
+                      Top Pages by Time Spent
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-white/60">Time Unit:</span>
+                      <select
+                        value={timeUnit}
+                        onChange={(e) =>
+                          setTimeUnit(e.target.value as "m" | "h" | "d")
+                        }
+                        className="px-2 py-1 bg-[#2a2a2a] border border-white/10 rounded text-white text-sm focus:outline-none focus:border-[#00c6ff]"
+                      >
+                        <option value="m">Minutes (m)</option>
+                        <option value="h">Hours (h)</option>
+                        <option value="d">Days (d)</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto max-h-96 overflow-y-auto">
                   <table className="w-full">
-                    <thead className="bg-[#2a2a2a]">
+                    <thead className="bg-[#2a2a2a] sticky top-0">
                       <tr>
-                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        <th className="p-3 text-left text-[#00c6ff] font-medium text-sm">
                           Rank
                         </th>
-                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        <th className="p-3 text-left text-[#00c6ff] font-medium text-sm">
                           Page
                         </th>
-                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        <th className="p-3 text-left text-[#00c6ff] font-medium text-sm">
                           Total Time
                         </th>
-                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        <th className="p-3 text-left text-[#00c6ff] font-medium text-sm">
                           Sessions
                         </th>
                       </tr>
@@ -1550,18 +1593,18 @@ export default function AdminPage() {
                             key={page.page_path}
                             className="hover:bg-white/5 transition-colors"
                           >
-                            <td className="p-4 font-medium text-white/80">
+                            <td className="p-3 font-medium text-white/80 text-sm">
                               #{index + 1}
                             </td>
-                            <td className="p-4">
-                              <span className="px-2 py-1 bg-[#2a2a2a] rounded text-sm font-mono">
+                            <td className="p-3">
+                              <span className="px-2 py-1 bg-[#2a2a2a] rounded text-xs font-mono">
                                 {page.page_path}
                               </span>
                             </td>
-                            <td className="p-4 font-medium text-white/90">
-                              {formatTime(page.total_time)}
+                            <td className="p-3 font-medium text-white/90 text-sm">
+                              {formatTimeWithUnit(page.total_time, timeUnit)}
                             </td>
-                            <td className="p-4 text-white/80">
+                            <td className="p-3 text-white/80 text-sm">
                               {page.sessions}
                             </td>
                           </tr>
@@ -1572,7 +1615,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Active Users (24 Hour) */}
+              {/* Active Users (Last 24 Hours) */}
               <div className="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden">
                 <div className="bg-[#00c6ff]/10 border-b border-[#00c6ff]/20 p-4">
                   <h2 className="text-xl font-semibold text-[#00c6ff]">
@@ -1580,24 +1623,24 @@ export default function AdminPage() {
                   </h2>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto max-h-96 overflow-y-auto">
                   <table className="w-full">
-                    <thead className="bg-[#2a2a2a]">
+                    <thead className="bg-[#2a2a2a] sticky top-0">
                       <tr>
-                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        <th className="p-3 text-left text-[#00c6ff] font-medium text-sm">
                           User
                         </th>
-                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        <th className="p-3 text-left text-[#00c6ff] font-medium text-sm">
                           Status
                         </th>
-                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        <th className="p-3 text-left text-[#00c6ff] font-medium text-sm">
                           Sessions
                         </th>
-                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                        <th className="p-3 text-left text-[#00c6ff] font-medium text-sm">
                           Total Time
                         </th>
-                        <th className="p-4 text-left text-[#00c6ff] font-medium">
-                          Last Activity
+                        <th className="p-3 text-left text-[#00c6ff] font-medium text-sm">
+                          Last Active
                         </th>
                       </tr>
                     </thead>
@@ -1607,7 +1650,7 @@ export default function AdminPage() {
                           <td colSpan={5} className="p-8 text-center">
                             <LoadingSpinner size="md" className="mx-auto" />
                             <p className="mt-2 text-white/60">
-                              Loading active users...
+                              Loading users...
                             </p>
                           </td>
                         </tr>
@@ -1621,27 +1664,20 @@ export default function AdminPage() {
                           </td>
                         </tr>
                       ) : (
-                        activeUsers.slice(0, 20).map((user, index) => (
+                        activeUsers.map((user) => (
                           <tr
                             key={user.discord_id}
                             className="hover:bg-white/5 transition-colors"
                           >
-                            <td className="p-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-6 h-6 rounded-full bg-[#00c6ff] flex items-center justify-center text-xs font-bold text-white">
-                                  {index + 1}
-                                </div>
-                                <div>
-                                  <div className="font-medium text-white/90">
-                                    {user.username || "Unknown"}
-                                  </div>
-                                  <div className="text-xs text-white/60 font-mono">
-                                    {user.discord_id}
-                                  </div>
-                                </div>
+                            <td className="p-3">
+                              <div className="font-medium text-white/90 text-sm">
+                                {user.username}
+                              </div>
+                              <div className="text-xs text-white/50 font-mono">
+                                {user.discord_id}
                               </div>
                             </td>
-                            <td className="p-4">
+                            <td className="p-3">
                               <div className="flex items-center gap-2">
                                 <div
                                   className={`w-2 h-2 rounded-full ${
@@ -1657,13 +1693,13 @@ export default function AdminPage() {
                                 </span>
                               </div>
                             </td>
-                            <td className="p-4 text-white/80">
+                            <td className="p-3 text-white/80 text-sm">
                               {user.total_sessions}
                             </td>
-                            <td className="p-4 font-medium text-white/90">
+                            <td className="p-3 font-medium text-white/90 text-sm">
                               {formatTime(user.total_time)}
                             </td>
-                            <td className="p-4 text-white/80">
+                            <td className="p-3 text-white/80 text-sm">
                               {timeAgo(user.last_activity)}
                             </td>
                           </tr>
@@ -1673,132 +1709,158 @@ export default function AdminPage() {
                   </table>
                 </div>
               </div>
+            </div>
 
-              {/* User Page Analytics */}
-              <div className="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden">
-                <div className="bg-[#00c6ff]/10 border-b border-[#00c6ff]/20 p-4">
+            {/* User Page Analytics - Full Width Below */}
+            <div className="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden">
+              <div className="bg-[#00c6ff]/10 border-b border-[#00c6ff]/20 p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <h2 className="text-xl font-semibold text-[#00c6ff]">
                     User Page Analytics
                   </h2>
-                </div>
-
-                <div className="p-4">
-                  <select
-                    value={selectedAnalyticsUser || ""}
-                    onChange={(e) =>
-                      setSelectedAnalyticsUser(e.target.value || null)
-                    }
-                    className="w-full p-2.5 mb-4 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#00c6ff] focus:ring-1 focus:ring-[#00c6ff]/30"
-                  >
-                    <option value="">Select a user...</option>
-                    {topUsers.map((user) => (
-                      <option key={user.username} value={user.username}>
-                        {user.username}
-                      </option>
-                    ))}
-                  </select>
-
                   {selectedAnalyticsUser && (
-                    <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="bg-[#2a2a2a] rounded-lg p-3 text-center">
-                        <div className="text-xl font-bold text-[#00c6ff] mb-1">
-                          {formatTime(getUserAnalyticsStats.totalTime)}
-                        </div>
-                        <div className="text-xs text-white/60">Total Time</div>
-                      </div>
-
-                      <div className="bg-[#2a2a2a] rounded-lg p-3 text-center">
-                        <div className="text-xl font-bold text-[#00c6ff] mb-1">
-                          {getUserAnalyticsStats.totalSessions}
-                        </div>
-                        <div className="text-xs text-white/60">
-                          Total Sessions
-                        </div>
-                      </div>
-
-                      <div className="bg-[#2a2a2a] rounded-lg p-3 text-center">
-                        <div className="text-xl font-bold text-[#00c6ff] mb-1">
-                          {getUserAnalyticsStats.uniquePages}
-                        </div>
-                        <div className="text-xs text-white/60">
-                          Unique Pages
-                        </div>
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-white/60">Time Unit:</span>
+                      <select
+                        value={userTimeUnit}
+                        onChange={(e) =>
+                          setUserTimeUnit(e.target.value as "m" | "h" | "d")
+                        }
+                        className="px-2 py-1 bg-[#2a2a2a] border border-white/10 rounded text-white text-sm focus:outline-none focus:border-[#00c6ff]"
+                      >
+                        <option value="m">Minutes (m)</option>
+                        <option value="h">Hours (h)</option>
+                        <option value="d">Days (d)</option>
+                      </select>
                     </div>
                   )}
+                </div>
+              </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-[#2a2a2a]">
-                        <tr>
-                          <th className="p-4 text-left text-[#00c6ff] font-medium">
-                            Page
-                          </th>
-                          <th className="p-4 text-left text-[#00c6ff] font-medium">
-                            Sessions
-                          </th>
-                          <th className="p-4 text-left text-[#00c6ff] font-medium">
-                            Total Time
-                          </th>
-                          <th className="p-4 text-left text-[#00c6ff] font-medium">
-                            Avg Time
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {!selectedAnalyticsUser ? (
-                          <tr>
-                            <td
-                              colSpan={4}
-                              className="p-8 text-center text-white/60"
-                            >
-                              Select a user to view their page analytics
-                            </td>
-                          </tr>
-                        ) : loadingState.analytics ? (
-                          <tr>
-                            <td colSpan={4} className="p-8 text-center">
-                              <LoadingSpinner size="md" className="mx-auto" />
-                              <p className="mt-2 text-white/60">
-                                Loading user analytics...
-                              </p>
-                            </td>
-                          </tr>
-                        ) : userPageAnalytics.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={4}
-                              className="p-8 text-center text-white/60"
-                            >
-                              No page analytics data available for this user
-                            </td>
-                          </tr>
-                        ) : (
-                          userPageAnalytics.map((page) => (
-                            <tr
-                              key={page.page_path}
-                              className="hover:bg-white/5 transition-colors"
-                            >
-                              <td className="p-4">
-                                <span className="px-2 py-1 bg-[#2a2a2a] rounded text-sm font-mono">
-                                  {page.page_path}
-                                </span>
-                              </td>
-                              <td className="p-4 text-white/80">
-                                {page.sessions}
-                              </td>
-                              <td className="p-4 font-medium text-white/90">
-                                {formatTime(page.total_time)}
-                              </td>
-                              <td className="p-4 text-white/80">
-                                {formatTime(page.avg_time)}
-                              </td>
-                            </tr>
-                          ))
+              <div className="p-4">
+                <select
+                  value={selectedAnalyticsUser || ""}
+                  onChange={(e) => {
+                    const username = e.target.value || null;
+                    setSelectedAnalyticsUser(username);
+                    if (username) {
+                      loadUserPageAnalytics(username);
+                    }
+                  }}
+                  className="w-full p-2.5 mb-4 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#00c6ff] focus:ring-1 focus:ring-[#00c6ff]/30"
+                >
+                  <option value="">Select a user...</option>
+                  {sortedTopUsers.map((user) => (
+                    <option key={user.username} value={user.username}>
+                      {user.username}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedAnalyticsUser && (
+                  <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-[#2a2a2a] rounded-lg p-3 text-center">
+                      <div className="text-xl font-bold text-[#00c6ff] mb-1">
+                        {formatTimeWithUnit(
+                          getUserAnalyticsStats.totalTime,
+                          userTimeUnit
                         )}
-                      </tbody>
-                    </table>
+                      </div>
+                      <div className="text-xs text-white/60">Total Time</div>
+                    </div>
+
+                    <div className="bg-[#2a2a2a] rounded-lg p-3 text-center">
+                      <div className="text-xl font-bold text-[#00c6ff] mb-1">
+                        {getUserAnalyticsStats.totalSessions}
+                      </div>
+                      <div className="text-xs text-white/60">
+                        Total Sessions
+                      </div>
+                    </div>
+
+                    <div className="bg-[#2a2a2a] rounded-lg p-3 text-center">
+                      <div className="text-xl font-bold text-[#00c6ff] mb-1">
+                        {getUserAnalyticsStats.uniquePages}
+                      </div>
+                      <div className="text-xs text-white/60">Unique Pages</div>
+                    </div>
                   </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-[#2a2a2a]">
+                      <tr>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Page
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Sessions
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Total Time
+                        </th>
+                        <th className="p-4 text-left text-[#00c6ff] font-medium">
+                          Avg Time
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {!selectedAnalyticsUser ? (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="p-8 text-center text-white/60"
+                          >
+                            Select a user to view their page analytics
+                          </td>
+                        </tr>
+                      ) : loadingState.analytics ? (
+                        <tr>
+                          <td colSpan={4} className="p-8 text-center">
+                            <LoadingSpinner size="md" className="mx-auto" />
+                            <p className="mt-2 text-white/60">
+                              Loading user analytics...
+                            </p>
+                          </td>
+                        </tr>
+                      ) : userPageAnalytics.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="p-8 text-center text-white/60"
+                          >
+                            No page analytics data available for this user
+                          </td>
+                        </tr>
+                      ) : (
+                        userPageAnalytics.map((page) => (
+                          <tr
+                            key={page.page_path}
+                            className="hover:bg-white/5 transition-colors"
+                          >
+                            <td className="p-4">
+                              <span className="px-2 py-1 bg-[#2a2a2a] rounded text-sm font-mono">
+                                {page.page_path}
+                              </span>
+                            </td>
+                            <td className="p-4 text-white/80">
+                              {page.sessions}
+                            </td>
+                            <td className="p-4 font-medium text-white/90">
+                              {formatTimeWithUnit(
+                                page.total_time,
+                                userTimeUnit
+                              )}
+                            </td>
+                            <td className="p-4 text-white/80">
+                              {formatTimeWithUnit(page.avg_time, userTimeUnit)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
