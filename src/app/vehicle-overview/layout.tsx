@@ -1,7 +1,7 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Vehicle Overview - A-List ELAN Hub',
+  title: 'Vehicle Overview',
   description: 'Comprehensive vehicle information and pricing for ELAN Life',
 }
 

@@ -2,7 +2,7 @@
 
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { useAuth } from "@/hooks/useAuth";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 // Types

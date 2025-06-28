@@ -1,29 +1,442 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, ChevronRight, BookOpen, Timer, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { createClient } from "@/lib/supabase/client";
-import { withTimeout } from "@/lib/timeout";
-import {
-  getDiscordId,
-  getUsername,
-  getAvatarUrl,
-  formatDate,
-  isSlowConnection,
+import { 
+  getDiscordId, 
+  getUsername, 
+  getAvatarUrl, 
+  formatDate, 
+  isSlowConnection 
 } from "@/lib/utils";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { withTimeout } from "@/lib/timeout";
 
-// Default categories that should be checked by default
-const DEFAULT_ON_CATEGORIES = ["Components", "HQ Components"];
+// ============================================================================
+// ONBOARDING TOOLTIP COMPONENT
+// ============================================================================
 
-type CategoryKey = keyof typeof itemsByCategory;
+interface TooltipStep {
+  id: string;
+  target: string;
+  title: string;
+  content: string;
+  placement: 'top' | 'bottom' | 'left' | 'right';
+  showNextButton?: boolean;
+}
 
-// Blueprint categories and items
-const itemsByCategory: { [key: string]: string[] } = {
+interface OnboardingTooltipProps {
+  step: TooltipStep;
+  isVisible: boolean;
+  onNext: () => void;
+  onSkip: () => void;
+  currentStep: number;
+  totalSteps: number;
+}
+
+const OnboardingTooltip = ({ 
+  step, 
+  isVisible, 
+  onNext, 
+  onSkip, 
+  currentStep, 
+  totalSteps 
+}: OnboardingTooltipProps) => {
+  const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+  const [isPositioned, setIsPositioned] = useState(false);
+
+  useEffect(() => {
+    if (isVisible && step.target) {
+      const updatePosition = () => {
+        const element = document.querySelector(`[data-tour="${step.target}"]`);
+        if (element) {
+          const rect = element.getBoundingClientRect();
+          setTargetRect(rect);
+          setIsPositioned(true);
+        }
+      };
+
+      updatePosition();
+      window.addEventListener('resize', updatePosition);
+      window.addEventListener('scroll', updatePosition);
+
+      return () => {
+        window.removeEventListener('resize', updatePosition);
+        window.removeEventListener('scroll', updatePosition);
+      };
+    }
+  }, [isVisible, step.target]);
+
+  const getTooltipPosition = useMemo(() => {
+    if (!targetRect) return { top: 0, left: 0 };
+
+    const tooltipWidth = 320;
+    const tooltipHeight = 140;
+    const gap = 12;
+
+    let top = 0;
+    let left = 0;
+
+    switch (step.placement) {
+      case 'top':
+        top = targetRect.top - tooltipHeight - gap;
+        left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
+        break;
+      case 'bottom':
+        top = targetRect.bottom + gap;
+        left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
+        break;
+      case 'left':
+        top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 2);
+        left = targetRect.left - tooltipWidth - gap;
+        break;
+      case 'right':
+        top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 2);
+        left = targetRect.right + gap;
+        break;
+    }
+
+    // Ensure tooltip stays within viewport
+    const padding = 16;
+    top = Math.max(padding, Math.min(window.innerHeight - tooltipHeight - padding, top));
+    left = Math.max(padding, Math.min(window.innerWidth - tooltipWidth - padding, left));
+
+    return { top, left };
+  }, [targetRect, step.placement]);
+
+  if (!isVisible || !isPositioned) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998]"
+        onClick={onSkip}
+      />
+      
+      {/* Spotlight */}
+      {targetRect && (
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.8, opacity: 0 }}
+          className="fixed z-[9999] pointer-events-none"
+          style={{
+            top: targetRect.top - 8,
+            left: targetRect.left - 8,
+            width: targetRect.width + 16,
+            height: targetRect.height + 16,
+          }}
+        >
+          <div className="w-full h-full rounded-xl border-2 border-[#00c6ff] shadow-[0_0_0_4px_rgba(0,198,255,0.3)] bg-[#00c6ff]/10" />
+        </motion.div>
+      )}
+
+      {/* Tooltip */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 10 }}
+        className="fixed z-[10000] w-80 bg-[#141414]/95 backdrop-blur-xl border border-[#00c6ff]/30 rounded-2xl p-6 shadow-2xl"
+        style={{
+          top: getTooltipPosition.top,
+          left: getTooltipPosition.left,
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-[#00c6ff]" />
+            <h3 className="text-lg font-semibold text-white">{step.title}</h3>
+          </div>
+          <button
+            onClick={onSkip}
+            className="text-gray-400 hover:text-white transition-colors p-1"
+            aria-label="Skip tour"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <p className="text-gray-300 text-sm leading-relaxed mb-4">
+          {step.content}
+        </p>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between">
+          <div className="flex gap-1">
+            {Array.from({ length: totalSteps }, (_, i) => (
+              <div
+                key={i}
+                className={`w-2 h-2 rounded-full transition-colors ${
+                  i === currentStep 
+                    ? 'bg-[#00c6ff]' 
+                    : i < currentStep 
+                    ? 'bg-[#00c6ff]/60' 
+                    : 'bg-gray-600'
+                }`}
+              />
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={onSkip}
+              className="px-3 py-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              Skip Tour
+            </button>
+            <button
+              onClick={onNext}
+              className="px-4 py-1.5 bg-[#00c6ff] hover:bg-[#0099cc] text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-1"
+            >
+              {currentStep === totalSteps - 1 ? 'Finish' : 'Next'}
+              <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </>
+  );
+};
+
+// ============================================================================
+// LIVE COUNTDOWN COMPONENT
+// ============================================================================
+
+interface LiveCountdownProps {
+  expirationTime: string;
+  className?: string;
+}
+
+const LiveCountdown = ({ expirationTime, className = "" }: LiveCountdownProps) => {
+  const [timeLeft, setTimeLeft] = useState<{
+    expired: boolean;
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+    totalHours: number;
+    percentage: number;
+  } | null>(null);
+
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const calculateTimeLeft = useCallback(() => {
+    const expiration = new Date(expirationTime);
+    const now = new Date();
+    const totalTrialMs = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+    const diff = expiration.getTime() - now.getTime();
+
+    if (diff <= 0) {
+      return {
+        expired: true,
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        totalHours: 0,
+        percentage: 0,
+      };
+    }
+
+    const totalSeconds = Math.floor(diff / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const totalHours = Math.floor(totalSeconds / 3600);
+    
+    // Calculate percentage of trial time remaining
+    const percentage = Math.max(0, Math.min(100, (diff / totalTrialMs) * 100));
+
+    return {
+      expired: false,
+      days,
+      hours,
+      minutes,
+      seconds,
+      totalHours,
+      percentage,
+    };
+  }, [expirationTime]);
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      setTimeLeft(calculateTimeLeft());
+    };
+
+    updateCountdown();
+    intervalRef.current = setInterval(updateCountdown, 1000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [calculateTimeLeft]);
+
+  if (!timeLeft) {
+    return (
+      <div className={`animate-pulse bg-white/10 h-20 rounded-xl ${className}`} />
+    );
+  }
+
+  if (timeLeft.expired) {
+    return (
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className={`bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl p-4 text-center ${className}`}
+      >
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <Timer className="w-5 h-5" />
+          <span className="font-semibold">Trial Expired</span>
+        </div>
+        <p className="text-sm opacity-90">Your trial access has ended</p>
+      </motion.div>
+    );
+  }
+
+  const getUrgencyColor = () => {
+    if (timeLeft.totalHours <= 24) return 'red';
+    if (timeLeft.totalHours <= 72) return 'yellow';
+    return 'blue';
+  };
+
+  const urgencyColor = getUrgencyColor();
+  const colorClasses = {
+    red: {
+      bg: 'bg-red-500/20',
+      text: 'text-red-400',
+      border: 'border-red-500/30',
+      progress: 'bg-red-500',
+    },
+    yellow: {
+      bg: 'bg-yellow-500/20',
+      text: 'text-yellow-400',
+      border: 'border-yellow-500/30',
+      progress: 'bg-yellow-500',
+    },
+    blue: {
+      bg: 'bg-blue-500/20',
+      text: 'text-blue-400',
+      border: 'border-blue-500/30',
+      progress: 'bg-blue-500',
+    },
+  };
+
+  return (
+    <motion.div
+      initial={{ scale: 0.95, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      className={`${colorClasses[urgencyColor].bg} ${colorClasses[urgencyColor].text} ${colorClasses[urgencyColor].border} border rounded-xl p-4 ${className}`}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Timer className="w-5 h-5" />
+          <span className="font-semibold">Trial Active</span>
+        </div>
+        <span className="text-xs opacity-75 font-medium">
+          {timeLeft.percentage.toFixed(1)}% remaining
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="bg-black/20 rounded-full h-2 mb-3 overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${timeLeft.percentage}%` }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className={`h-full ${colorClasses[urgencyColor].progress} rounded-full`}
+        />
+      </div>
+
+      {/* Countdown */}
+      <div className="grid grid-cols-4 gap-2 text-center">
+        <div>
+          <div className="text-lg font-bold tabular-nums">{timeLeft.days}</div>
+          <div className="text-xs opacity-75">Days</div>
+        </div>
+        <div>
+          <div className="text-lg font-bold tabular-nums">{timeLeft.hours}</div>
+          <div className="text-xs opacity-75">Hours</div>
+        </div>
+        <div>
+          <div className="text-lg font-bold tabular-nums">{timeLeft.minutes}</div>
+          <div className="text-xs opacity-75">Min</div>
+        </div>
+        <div>
+          <div className="text-lg font-bold tabular-nums">{timeLeft.seconds}</div>
+          <div className="text-xs opacity-75">Sec</div>
+        </div>
+      </div>
+
+      {/* Expiration date */}
+      <div className="text-center mt-3 pt-3 border-t border-current/20">
+        <p className="text-xs opacity-75">
+          Expires {formatDate(expirationTime)} at{" "}
+          {new Date(expirationTime).toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          })}
+        </p>
+      </div>
+    </motion.div>
+  );
+};
+
+// ============================================================================
+// ONBOARDING TOUR CONFIGURATION
+// ============================================================================
+
+const TOUR_STEPS: TooltipStep[] = [
+  {
+    id: 'profile-header',
+    target: 'profile-header',
+    title: 'Welcome to Your Profile!',
+    content: 'This is your personal dashboard where you can view your account details and manage your blueprint selections.',
+    placement: 'bottom',
+  },
+  {
+    id: 'trial-status',
+    target: 'trial-status',
+    title: 'Live Trial Countdown',
+    content: 'Watch your trial time tick down in real-time! This meter shows exactly how much premium access you have left.',
+    placement: 'left',
+  },
+  {
+    id: 'blueprints-section',
+    target: 'blueprints-section',
+    title: 'Blueprint Management',
+    content: 'This is where you pick blueprints—search or select all! Your selections will be used in the Crafting Calculator.',
+    placement: 'top',
+  },
+  {
+    id: 'search-blueprints',
+    target: 'search-blueprints',
+    title: 'Quick Blueprint Search',
+    content: 'Use this search to quickly find specific blueprints. You can also use the category filters below!',
+    placement: 'bottom',
+  },
+];
+
+// ============================================================================
+// CONSTANTS & TYPES (from original file)
+// ============================================================================
+
+const BLUEPRINT_CATEGORIES = {
   Weapons: [
     "AK-74",
     "AKS-74U",
@@ -229,9 +642,9 @@ const itemsByCategory: { [key: string]: string[] } = {
   ],
 };
 
-// Local storage keys
 const PROFILE_CACHE_KEY = "profile_data_cache";
 const BLUEPRINTS_CACHE_KEY = "blueprints_cache";
+const ONBOARDING_COMPLETED_KEY = "profile_onboarding_completed";
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
 interface UserProfile {
@@ -269,6 +682,10 @@ interface ErrorState {
   saving: string | null;
 }
 
+// ============================================================================
+// MAIN PROFILE PAGE COMPONENT
+// ============================================================================
+
 export default function ProfilePage() {
   usePageTracking();
   const router = useRouter();
@@ -277,10 +694,30 @@ export default function ProfilePage() {
 
   // Enhanced state management
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [ownedBlueprints, setOwnedBlueprints] = useState<string[]>([]);
-  const [selectedBlueprints, setSelectedBlueprints] = useState<Set<string>>(
-    new Set()
-  );
+  const [ownedBlueprints, setOwnedBlueprints] = useState<string[]>([]); // User's saved selections from DB
+  const [selectedBlueprints, setSelectedBlueprints] = useState<Set<string>>(new Set()); // Current UI selections
+  
+  // Get all available blueprints from categories (excluding HQ Components and Components from count)
+  const allAvailableBlueprints = useMemo(() => {
+    return Object.values(BLUEPRINT_CATEGORIES).flat().sort();
+  }, []);
+
+  // Get blueprints that count towards the total (excluding HQ Components and Components)
+  const countableBlueprints = useMemo(() => {
+    const excludedCategories = ['HQ Components', 'Components'];
+    return Object.entries(BLUEPRINT_CATEGORIES)
+      .filter(([category]) => !excludedCategories.includes(category))
+      .flatMap(([, blueprints]) => blueprints)
+      .sort();
+  }, []);
+
+  // Get default selected blueprints (HQ Components + Components)
+  const defaultSelectedBlueprints = useMemo(() => {
+    return [
+      ...BLUEPRINT_CATEGORIES['HQ Components'],
+      ...BLUEPRINT_CATEGORIES['Components']
+    ];
+  }, []);
   const [loadingState, setLoadingState] = useState<LoadingState>({
     profile: false,
     blueprints: false,
@@ -299,6 +736,14 @@ export default function ProfilePage() {
   const [avatarError, setAvatarError] = useState(false);
   const [isSlowConn, setIsSlowConn] = useState(false);
 
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [currentTourStep, setCurrentTourStep] = useState(0);
+
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
   // Refs for tracking loading attempts and timeouts
   const loadAttemptsRef = useRef<{ profile: number; blueprints: number }>({
     profile: 0,
@@ -307,10 +752,35 @@ export default function ProfilePage() {
   const timeoutsRef = useRef<{ [key: string]: NodeJS.Timeout | null }>({});
   const isMountedRef = useRef(true);
 
-  // Check for slow connection
+  // Check for slow connection and onboarding status
   useEffect(() => {
     setIsSlowConn(isSlowConnection());
-  }, []);
+    
+    // Check if user has completed onboarding
+    const onboardingCompleted = localStorage.getItem(ONBOARDING_COMPLETED_KEY);
+    if (!onboardingCompleted && user) {
+      // Delay showing onboarding until profile loads
+      const timer = setTimeout(() => {
+        setShowOnboarding(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
+
+  // Onboarding handlers
+  const handleNextTourStep = () => {
+    if (currentTourStep < TOUR_STEPS.length - 1) {
+      setCurrentTourStep(currentTourStep + 1);
+    } else {
+      handleSkipTour();
+    }
+  };
+
+  const handleSkipTour = () => {
+    setShowOnboarding(false);
+    setCurrentTourStep(0);
+    localStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true');
+  };
 
   // Clear all timeouts on unmount
   useEffect(() => {
@@ -370,16 +840,14 @@ export default function ProfilePage() {
               }
 
               if (areBlueprintsFresh) {
-                setOwnedBlueprints(blueprintsData);
+                setOwnedBlueprints(blueprintsData); // User's saved selections
                 initializeSelectedBlueprints(blueprintsData);
                 setLoadingState((prev) => ({ ...prev, blueprints: false }));
 
-                // If both are fresh, we can return early
                 if (isProfileFresh) return;
               }
             } catch (error) {
               console.error("Error parsing cached data:", error);
-              // Continue with API fetch if cache parsing fails
             }
           }
         }
@@ -393,20 +861,6 @@ export default function ProfilePage() {
 
         if (error) {
           console.error("Error fetching user data:", error);
-
-          // Increment attempt counter
-          loadAttemptsRef.current.profile++;
-
-          // Retry logic
-          if (loadAttemptsRef.current.profile < 3) {
-            timeoutsRef.current.profileRetry = setTimeout(() => {
-              if (isMountedRef.current) {
-                loadDataSeparately();
-              }
-            }, 1000 * loadAttemptsRef.current.profile);
-            return;
-          }
-
           setErrorState((prev) => ({
             ...prev,
             profile: "Failed to load user data",
@@ -419,13 +873,10 @@ export default function ProfilePage() {
           return;
         }
 
-        // Parse the returned data
         const combinedData = data as CombinedData;
 
         if (combinedData.profile) {
           setUserProfile(combinedData.profile);
-
-          // Cache profile data
           localStorage.setItem(
             PROFILE_CACHE_KEY,
             JSON.stringify({
@@ -439,9 +890,8 @@ export default function ProfilePage() {
           const blueprintNames = combinedData.blueprints.map(
             (bp) => bp.blueprint_name
           );
-          setOwnedBlueprints(blueprintNames);
+          setOwnedBlueprints(blueprintNames); // This is just for reference, not filtering
 
-          // Cache blueprints data
           localStorage.setItem(
             BLUEPRINTS_CACHE_KEY,
             JSON.stringify({
@@ -450,8 +900,10 @@ export default function ProfilePage() {
             })
           );
 
-          // Initialize selected blueprints
           initializeSelectedBlueprints(blueprintNames);
+        } else {
+          // If no saved blueprints, start with empty selection
+          initializeSelectedBlueprints([]);
         }
 
         setLoadingState((prev) => ({
@@ -460,13 +912,11 @@ export default function ProfilePage() {
           blueprints: false,
         }));
       } catch (error) {
-        console.error("Failed to load user data:", error);
+        console.error("Error loading user data:", error);
         setErrorState((prev) => ({
           ...prev,
-          profile: "An unexpected error occurred",
-          blueprints: "An unexpected error occurred",
+          profile: "Failed to load user data",
         }));
-      } finally {
         setLoadingState((prev) => ({
           ...prev,
           profile: false,
@@ -477,156 +927,38 @@ export default function ProfilePage() {
     [user, supabase]
   );
 
-  // Fallback method if RPC fails
-  const loadDataSeparately = useCallback(async () => {
-    if (!user) return;
-
-    setLoadingState((prev) => ({ ...prev, profile: true, blueprints: true }));
-
-    try {
-      const discordId = getDiscordId(user);
-      if (!discordId) {
-        setErrorState((prev) => ({
-          ...prev,
-          profile: "Could not determine Discord ID",
-        }));
-        setLoadingState((prev) => ({
-          ...prev,
-          profile: false,
-          blueprints: false,
-        }));
-        return;
-      }
-
-      // Load profile
-      const { data: profileData, error: profileError } = await withTimeout(
-        supabase.from("users").select("*").eq("discord_id", discordId).single()
-      );
-
-      if (profileError && profileError.code !== "PGRST116") {
-        console.error("Error fetching user profile:", profileError);
-        setErrorState((prev) => ({
-          ...prev,
-          profile: "Failed to load profile data",
-        }));
-      } else if (profileData) {
-        setUserProfile(profileData);
-
-        // Cache profile data
-        localStorage.setItem(
-          PROFILE_CACHE_KEY,
-          JSON.stringify({
-            data: profileData,
-            timestamp: Date.now(),
-          })
+  // Initialize selected blueprints from localStorage or database
+  const initializeSelectedBlueprints = useCallback((savedBlueprints: string[]) => {
+    const saved = localStorage.getItem("selected_blueprints");
+    let initialSelections = new Set(defaultSelectedBlueprints); // Start with HQ Components + Components
+    
+    if (saved) {
+      try {
+        const savedSelections = JSON.parse(saved);
+        // Only keep valid blueprint names that exist in our categories
+        const validSelections = savedSelections.filter((bp: string) =>
+          allAvailableBlueprints.includes(bp)
         );
+        initialSelections = new Set([...defaultSelectedBlueprints, ...validSelections]);
+      } catch (error) {
+        console.error("Error parsing saved blueprints:", error);
+        // Fall back to database selections + defaults
+        initialSelections = new Set([...defaultSelectedBlueprints, ...savedBlueprints]);
       }
-
-      setLoadingState((prev) => ({ ...prev, profile: false }));
-
-      // Load blueprints
-      const { data: blueprintsData, error: blueprintsError } =
-        await withTimeout(
-          supabase
-            .from("user_blueprints")
-            .select("*")
-            .eq("discord_id", discordId)
-        );
-
-      if (blueprintsError) {
-        console.error("Error fetching blueprints:", blueprintsError);
-        setErrorState((prev) => ({
-          ...prev,
-          blueprints: "Failed to load blueprints",
-        }));
-      } else if (blueprintsData) {
-        const blueprintNames = blueprintsData.map((bp) => bp.blueprint_name);
-        setOwnedBlueprints(blueprintNames);
-
-        // Cache blueprints data
-        localStorage.setItem(
-          BLUEPRINTS_CACHE_KEY,
-          JSON.stringify({
-            data: blueprintNames,
-            timestamp: Date.now(),
-          })
-        );
-
-        // Initialize selected blueprints
-        initializeSelectedBlueprints(blueprintNames);
-      }
-
-      setLoadingState((prev) => ({ ...prev, blueprints: false }));
-    } catch (error) {
-      console.error("Failed to load data separately:", error);
-      setErrorState((prev) => ({
-        ...prev,
-        profile: prev.profile || "An unexpected error occurred",
-        blueprints: prev.blueprints || "An unexpected error occurred",
-      }));
-    } finally {
-      setLoadingState((prev) => ({
-        ...prev,
-        profile: false,
-        blueprints: false,
-      }));
+    } else {
+      // Use database selections + defaults as initial state
+      initialSelections = new Set([...defaultSelectedBlueprints, ...savedBlueprints]);
     }
-  }, [user, supabase]);
+    
+    setSelectedBlueprints(initialSelections);
+  }, [allAvailableBlueprints, defaultSelectedBlueprints]);
 
-  // Initialize selected blueprints
-  const initializeSelectedBlueprints = useCallback(
-    (blueprintNames: string[]) => {
-      const initialSelected = new Set<string>();
-
-      // Add owned blueprints
-      blueprintNames.forEach((name) => initialSelected.add(name));
-
-      // Add default categories
-      DEFAULT_ON_CATEGORIES.forEach((category) => {
-        const categoryItems =
-          itemsByCategory[category as keyof typeof itemsByCategory];
-        if (categoryItems) {
-          categoryItems.forEach((item: string) => initialSelected.add(item));
-        }
-      });
-
-      setSelectedBlueprints(initialSelected);
-    },
-    []
-  );
-
-  // Initialize data
-  useEffect(() => {
-    if (!authLoading && user) {
-      loadUserData();
-    } else if (!authLoading && !user) {
-      router.push("/");
-    }
-  }, [authLoading, user, loadUserData, router]);
-
-  // Handle blueprint toggle
-  const handleBlueprintToggle = useCallback((blueprint: string) => {
-    setSelectedBlueprints((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(blueprint)) {
-        newSet.delete(blueprint);
-      } else {
-        newSet.add(blueprint);
-      }
-      return newSet;
-    });
-  }, []);
-
-  // Save blueprints with optimistic updates and error handling
-  const saveBlueprints = async () => {
+  // Save blueprint selections
+  const saveBlueprintSelections = useCallback(async () => {
     if (!user) return;
 
     setLoadingState((prev) => ({ ...prev, saving: true }));
     setSaveStatus({ type: null, message: "" });
-    setErrorState((prev) => ({ ...prev, saving: null }));
-
-    // Store current selection for rollback if needed
-    const previousSelection = new Set(selectedBlueprints);
 
     try {
       const discordId = getDiscordId(user);
@@ -634,23 +966,12 @@ export default function ProfilePage() {
         throw new Error("Could not determine Discord ID");
       }
 
-      // Filter out default components that are always selected
+      // Filter out default components that are always selected (don't save to DB)
       const blueprintsToSave = Array.from(selectedBlueprints).filter(
-        (blueprint) => {
-          // Check if blueprint belongs to a default category
-          for (const category of DEFAULT_ON_CATEGORIES) {
-            if (itemsByCategory[category]?.includes(blueprint)) {
-              return false;
-            }
-          }
-          return true;
-        }
+        (blueprint) => !defaultSelectedBlueprints.includes(blueprint)
       );
 
-      // Optimistic update
-      setOwnedBlueprints(blueprintsToSave);
-
-      // Delete existing blueprints
+      // Delete existing blueprints for this user
       const { error: deleteError } = await withTimeout(
         supabase.from("user_blueprints").delete().eq("discord_id", discordId)
       );
@@ -660,7 +981,7 @@ export default function ProfilePage() {
         throw deleteError;
       }
 
-      // Insert new blueprints
+      // Insert new blueprints if any are selected
       if (blueprintsToSave.length > 0) {
         const inserts = blueprintsToSave.map((name) => ({
           discord_id: discordId,
@@ -677,7 +998,13 @@ export default function ProfilePage() {
         }
       }
 
-      // Update cache
+      // Update local cache
+      localStorage.setItem(
+        "selected_blueprints",
+        JSON.stringify(Array.from(selectedBlueprints))
+      );
+
+      // Update the cached blueprints data
       localStorage.setItem(
         BLUEPRINTS_CACHE_KEY,
         JSON.stringify({
@@ -686,86 +1013,160 @@ export default function ProfilePage() {
         })
       );
 
+      // Update ownedBlueprints state for change detection
+      setOwnedBlueprints(blueprintsToSave);
+
+      // Count only non-default blueprints for success message
+      const countableSelected = Array.from(selectedBlueprints).filter(bp => 
+        !defaultSelectedBlueprints.includes(bp)
+      ).length;
+
       setSaveStatus({
         type: "success",
-        message: "Blueprints saved successfully!",
+        message: `✅ Successfully saved ${countableSelected} blueprint selections!`,
       });
+
+      setTimeout(() => {
+        setSaveStatus({ type: null, message: "" });
+      }, 3000);
     } catch (error) {
-      console.error("Failed to save blueprints:", error);
-
-      // Rollback to previous selection
-      setSelectedBlueprints(previousSelection);
-
+      console.error("Error saving blueprint selections:", error);
       setSaveStatus({
         type: "error",
-        message: "Failed to save blueprints. Please try again.",
+        message: "❌ Failed to save blueprint selections. Please try again.",
       });
 
-      setErrorState((prev) => ({
-        ...prev,
-        saving:
-          error instanceof Error ? error.message : "Unknown error occurred",
-      }));
+      setTimeout(() => {
+        setSaveStatus({ type: null, message: "" });
+      }, 5000);
     } finally {
       setLoadingState((prev) => ({ ...prev, saving: false }));
-
-      // Clear status after 3 seconds
-      timeoutsRef.current.statusClear = setTimeout(() => {
-        if (isMountedRef.current) {
-          setSaveStatus({ type: null, message: "" });
-        }
-      }, 3000);
     }
-  };
+  }, [user, selectedBlueprints, supabase, defaultSelectedBlueprints]);
 
-  // Calculate blueprint counts
-  const getBlueprintCounts = useCallback(() => {
-    // Count only non-default category blueprints
-    const filteredBlueprints = Object.entries(itemsByCategory)
-      .filter(([category]) => !DEFAULT_ON_CATEGORIES.includes(category))
-      .flatMap(([_, items]: [string, string[]]) => items);
+  // Blueprint selection handlers
+  const toggleBlueprint = useCallback((blueprint: string) => {
+    setSelectedBlueprints((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(blueprint)) {
+        newSet.delete(blueprint);
+      } else {
+        newSet.add(blueprint);
+      }
+      return newSet;
+    });
+  }, []);
 
-    const selectedCount = Array.from(selectedBlueprints).filter((blueprint) =>
-      filteredBlueprints.includes(blueprint)
-    ).length;
+  const toggleCategory = useCallback((category: string) => {
+    const categoryBlueprints = BLUEPRINT_CATEGORIES[category as keyof typeof BLUEPRINT_CATEGORIES];
+    const allSelected = categoryBlueprints.every((bp) =>
+      selectedBlueprints.has(bp)
+    );
 
-    return {
-      total: filteredBlueprints.length,
-      selected: selectedCount,
-    };
+    setSelectedBlueprints((prev) => {
+      const newSet = new Set(prev);
+      if (allSelected) {
+        categoryBlueprints.forEach((bp) => newSet.delete(bp));
+      } else {
+        categoryBlueprints.forEach((bp) => newSet.add(bp));
+      }
+      return newSet;
+    });
   }, [selectedBlueprints]);
 
-  const { total, selected } = getBlueprintCounts();
+  const selectAll = useCallback(() => {
+    setSelectedBlueprints(new Set(allAvailableBlueprints));
+  }, [allAvailableBlueprints]);
 
-  // Render loading skeleton
-  if (authLoading && !user) {
+  const deselectAll = useCallback(() => {
+    // Keep default selections (HQ Components + Components) even when "deselecting all"
+    setSelectedBlueprints(new Set(defaultSelectedBlueprints));
+  }, [defaultSelectedBlueprints]);
+
+  // Filter blueprints based on search and category
+  const filteredBlueprints = useMemo(() => {
+    let blueprints = allAvailableBlueprints;
+
+    if (selectedCategory !== "all") {
+      const categoryBlueprints = BLUEPRINT_CATEGORIES[selectedCategory as keyof typeof BLUEPRINT_CATEGORIES];
+      blueprints = blueprints.filter((bp) => categoryBlueprints.includes(bp));
+    }
+
+    if (searchQuery) {
+      blueprints = blueprints.filter((bp) =>
+        bp.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    return blueprints.sort();
+  }, [allAvailableBlueprints, selectedCategory, searchQuery]);
+
+  // Load data on mount
+  useEffect(() => {
+    if (user && !authLoading) {
+      loadUserData();
+    }
+  }, [user, authLoading, loadUserData]);
+
+  // Calculate stats (exclude HQ Components and Components from count)
+  const { selected, total } = useMemo(() => {
+    const countableSelected = Array.from(selectedBlueprints).filter(bp => 
+      countableBlueprints.includes(bp)
+    ).length;
+    
+    return {
+      selected: countableSelected,
+      total: countableBlueprints.length,
+    };
+  }, [selectedBlueprints, countableBlueprints]);
+
+  // Check if there are any changes from the initial state (for save button state)
+  const hasChanges = useMemo(() => {
+    const currentSelectionsArray = Array.from(selectedBlueprints).sort();
+    const initialSelectionsArray = [...defaultSelectedBlueprints, ...ownedBlueprints].sort();
+    
+    return JSON.stringify(currentSelectionsArray) !== JSON.stringify(initialSelectionsArray);
+  }, [selectedBlueprints, defaultSelectedBlueprints, ownedBlueprints]);
+
+  // Handle authentication loading
+  if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0a0a] to-[#1a1a1a]">
-        <div className="flex flex-col items-center space-y-4">
-          <LoadingSpinner size="lg" />
-          <p className="text-white/70 animate-pulse">Loading profile...</p>
+      <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] to-[#1a1a1a] flex items-center justify-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+
+  // Handle not authenticated
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] to-[#1a1a1a] flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-white mb-4">
+            Authentication Required
+          </h1>
+          <p className="text-gray-400 mb-6">
+            Please log in to view your profile.
+          </p>
+          <button
+            onClick={() => router.push("/")}
+            className="bg-[#00c6ff] hover:bg-[#0099cc] text-white px-6 py-3 rounded-xl font-semibold transition-colors"
+          >
+            Return Home
+          </button>
         </div>
       </div>
     );
   }
 
-  // Redirect if not logged in
-  if (!user) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] to-[#1a1a1a] text-[#e8e8e8] p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 bg-white/5 backdrop-blur-xl border border-white/10 text-[#00c6ff] px-4 py-3 rounded-xl font-semibold transition-all hover:bg-[#00c6ff]/10 hover:border-[#00c6ff]/30 hover:-translate-y-0.5 mb-6"
-        >
-          ← Back
-        </Link>
-
+    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] to-[#1a1a1a] pt-24 pb-12 px-4 relative">
+      <div className="max-w-6xl mx-auto">
         {/* Profile Card */}
-        <div className="bg-[#141414]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-10 mb-6 relative overflow-hidden">
+        <div 
+          className="bg-[#141414]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-10 mb-6 relative overflow-hidden"
+          data-tour="profile-header"
+        >
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#00c6ff]/50 to-transparent"></div>
 
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6 mb-8">
@@ -895,33 +1296,16 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Trial Status (conditional) */}
-            {userProfile?.hub_trial && (
-              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-5 transition-all hover:bg-white/[0.05] hover:border-[#00c6ff]/20 hover:-translate-y-0.5">
-                <div className="text-[#a0a0a0] text-xs font-semibold uppercase tracking-wider mb-2">
-                  Trial Status
-                </div>
-                <div>
-                  {loadingState.profile ? (
-                    <div className="w-32 h-7 bg-white/10 animate-pulse rounded-full"></div>
-                  ) : (
-                    <span
-                      className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold ${
-                        userProfile.trial_expiration &&
-                        new Date(userProfile.trial_expiration) > new Date()
-                          ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
-                          : "bg-red-500/20 text-red-400 border border-red-500/30"
-                      }`}
-                    >
-                      {userProfile.trial_expiration &&
-                      new Date(userProfile.trial_expiration) > new Date()
-                        ? `Trial Active (Expires: ${formatDate(
-                            userProfile.trial_expiration
-                          )})`
-                        : "Trial Expired"}
-                    </span>
-                  )}
-                </div>
+            {/* Live Trial Status */}
+            {userProfile?.hub_trial && userProfile?.trial_expiration && (
+              <div 
+                className="md:col-span-2 lg:col-span-1"
+                data-tour="trial-status"
+              >
+                <LiveCountdown 
+                  expirationTime={userProfile.trial_expiration}
+                  className="h-full"
+                />
               </div>
             )}
           </div>
@@ -935,7 +1319,10 @@ export default function ProfilePage() {
         </div>
 
         {/* Blueprints Section */}
-        <div className="bg-[#141414]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-10 relative overflow-hidden">
+        <div 
+          className="bg-[#141414]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-10 relative overflow-hidden"
+          data-tour="blueprints-section"
+        >
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#00c6ff]/50 to-transparent"></div>
 
           <div className="text-center mb-8">
@@ -951,161 +1338,231 @@ export default function ProfilePage() {
             </div>
 
             <p className="text-[#a0a0a0] text-base max-w-2xl mx-auto">
-              Select the blueprints you own. These will appear in the Crafting
-              Calculator and help optimize your gameplay experience.
+              Select the blueprints you currently own. These will appear in the Crafting
+              Calculator and help optimize your gameplay experience. Choose from {countableBlueprints.length} available blueprints!
+              <br />
+              <span className="text-sm text-[#a0a0a0]/80 mt-1 block">
+                Note: HQ Components and Components are automatically included and don't count toward your total.
+              </span>
             </p>
+          </div>
+
+          {/* Search and Controls */}
+          <div className="mb-6 space-y-4">
+            {/* Search Bar */}
+            <div 
+              className="relative max-w-md mx-auto"
+              data-tour="search-blueprints"
+            >
+              <input
+                type="text"
+                placeholder="Search blueprints..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-[#00c6ff]/50 focus:bg-white/10 transition-all"
+              />
+              <BookOpen className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            </div>
+
+            {/* Category Filter */}
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                onClick={() => setSelectedCategory("all")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  selectedCategory === "all"
+                    ? "bg-[#00c6ff] text-white"
+                    : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                All Categories
+              </button>
+              {Object.keys(BLUEPRINT_CATEGORIES).map((category) => (
+                <button
+                  key={category}
+                  onClick={() => setSelectedCategory(category)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    selectedCategory === category
+                      ? "bg-[#00c6ff] text-white"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+
+            {/* Bulk Actions */}
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                onClick={selectAll}
+                disabled={loadingState.blueprints || selected === total}
+                className="px-4 py-2 bg-green-600/20 text-green-400 border border-green-600/30 rounded-lg text-sm font-medium hover:bg-green-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Select All ({total})
+              </button>
+              <button
+                onClick={deselectAll}
+                disabled={loadingState.blueprints || selected === 0}
+                className="px-4 py-2 bg-red-600/20 text-red-400 border border-red-600/30 rounded-lg text-sm font-medium hover:bg-red-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Deselect All
+              </button>
+              {selectedCategory !== "all" && !['HQ Components', 'Components'].includes(selectedCategory) && (
+                <button
+                  onClick={() => toggleCategory(selectedCategory)}
+                  disabled={loadingState.blueprints}
+                  className="px-4 py-2 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg text-sm font-medium hover:bg-blue-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Toggle {selectedCategory}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Loading, Error, and Content States */}
           {loadingState.profile || loadingState.blueprints ? (
-            <div className="flex flex-col items-center justify-center py-8 space-y-4">
+            <div className="text-center py-12">
               <LoadingSpinner size="lg" />
-              <p className="text-white/70 animate-pulse">
-                Loading blueprints...
+              <p className="text-[#a0a0a0] mt-4">
+                {isSlowConn
+                  ? "Loading blueprints (slow connection detected)..."
+                  : "Loading your blueprints..."}
               </p>
-              {isSlowConn && (
-                <p className="text-yellow-400/80 text-sm text-center max-w-md">
-                  Slow connection detected. This might take a moment...
-                </p>
-              )}
             </div>
           ) : errorState.profile || errorState.blueprints ? (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-lg text-center mb-8">
-              {errorState.profile || errorState.blueprints}
-              <button
-                onClick={() => {
-                  setErrorState({
-                    profile: null,
-                    blueprints: null,
-                    saving: null,
-                  });
-                  setLoadingState({
-                    profile: true,
-                    blueprints: true,
-                    saving: false,
-                  });
-                  loadUserData(true);
-                }}
-                className="mt-4 px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
-              >
-                Retry
-              </button>
+            <div className="text-center py-12">
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-6 rounded-xl max-w-md mx-auto">
+                <h3 className="text-lg font-semibold mb-2">Error Loading Data</h3>
+                <p className="mb-4">
+                  {errorState.profile || errorState.blueprints}
+                </p>
+                <button
+                  onClick={() => loadUserData(true)}
+                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  Try Again
+                </button>
+              </div>
             </div>
           ) : (
             <>
-
-              {/* Blueprint Categories */}
-              <div className="space-y-4 mb-8">
-                {Object.entries(itemsByCategory).map(([category, items]) => {
-                  const isDefaultCategory =
-                    DEFAULT_ON_CATEGORIES.includes(category);
-
-                  return (
-                    <details
-                      key={category}
-                      className="group bg-white/[0.02] border border-white/[0.08] rounded-xl overflow-hidden"
-                    >
-                      <summary className="flex items-center justify-between p-5 cursor-pointer bg-white/[0.03] font-semibold text-white hover:bg-white/[0.05] transition-all">
-                        {category}
-                        <span className="text-[#00c6ff] text-sm transition-transform duration-300 group-open:rotate-180">
-                          ▼
-                        </span>
-                      </summary>
-
-                      {/* Responsive grid with proper spacing */}
-                      <div className="p-4 grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {items.map((item) => (
-                          <label
-                            key={item}
-                            className="flex items-center p-3 sm:p-4 bg-white/[0.02] border border-white/[0.05] rounded-lg hover:bg-white/[0.04] hover:border-[#00c6ff]/20 transition-all min-h-[3.5rem] sm:min-h-[4rem] cursor-pointer select-none active:scale-[0.98] sm:active:scale-[0.99]"
-                            htmlFor={`blueprint-${item}`}
+              {/* Blueprint Grid */}
+              {filteredBlueprints.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+                  <AnimatePresence mode="popLayout">
+                    {filteredBlueprints.map((blueprint) => (
+                      <motion.div
+                        key={blueprint}
+                        layout
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.2 }}
+                        className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg ${
+                          selectedBlueprints.has(blueprint)
+                            ? "bg-[#00c6ff]/10 border-[#00c6ff]/50 shadow-[0_0_20px_rgba(0,198,255,0.2)]"
+                            : "bg-white/[0.03] border-white/10 hover:border-[#00c6ff]/30 hover:bg-white/[0.05]"
+                        } ${
+                          defaultSelectedBlueprints.includes(blueprint)
+                            ? "opacity-60 cursor-not-allowed"
+                            : ""
+                        }`}
+                        onClick={() => {
+                          // Prevent deselecting default blueprints (HQ Components + Components)
+                          if (!defaultSelectedBlueprints.includes(blueprint)) {
+                            toggleBlueprint(blueprint);
+                          }
+                        }}
+                      >
+                        <div className="text-white font-medium text-sm leading-relaxed">
+                          {blueprint}
+                          {defaultSelectedBlueprints.includes(blueprint) && (
+                            <span className="block text-xs text-[#00c6ff]/80 mt-1">
+                              (Auto-included)
+                            </span>
+                          )}
+                        </div>
+                        {selectedBlueprints.has(blueprint) && (
+                          <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-[#00c6ff] rounded-full flex items-center justify-center text-white text-xs font-bold"
                           >
-                            {/* Hidden checkbox for form control */}
-                            <input
-                              id={`blueprint-${item}`}
-                              type="checkbox"
-                              className="sr-only"
-                              checked={
-                                selectedBlueprints.has(item) ||
-                                isDefaultCategory
-                              }
-                              onChange={() => handleBlueprintToggle(item)}
-                              disabled={isDefaultCategory}
-                            />
+                            ✓
+                          </motion.div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-gray-400 text-lg mb-2">No blueprints found</div>
+                  <p className="text-gray-500 text-sm">
+                    {searchQuery || selectedCategory !== "all"
+                      ? "Try adjusting your search or filter criteria"
+                      : "No blueprints match your current filters"}
+                  </p>
+                </div>
+              )}
 
-                            {/* Item text - takes available space, responsive text size */}
-                            <div className="flex-1 text-[#e8e8e8] text-xs sm:text-sm font-medium pr-3 sm:pr-4 break-words leading-tight">
-                              {item}
-                            </div>
-
-                            {/* Toggle container - responsive sizing, always centered */}
-                            <div className="flex items-center justify-center flex-shrink-0 pointer-events-none">
-                              <div className="relative inline-block w-10 h-5 sm:w-12 sm:h-6">
-                                {/* Toggle track - responsive sizing */}
-                                <span
-                                  className={`absolute inset-0 rounded-full transition-all duration-300 border ${
-                                    selectedBlueprints.has(item) ||
-                                    isDefaultCategory
-                                      ? "bg-gradient-to-r from-[#00c6ff] to-[#0072ff] border-[#00c6ff]"
-                                      : "bg-white/10 border-white/20"
-                                  }`}
-                                >
-                                  {/* Toggle slider - responsive sizing and positioning */}
-                                  <span
-                                    className={`absolute bg-white rounded-full transition-transform duration-300 ${
-                                      selectedBlueprints.has(item) ||
-                                      isDefaultCategory
-                                        ? "translate-x-5 sm:translate-x-6"
-                                        : "translate-x-0"
-                                    } ${
-                                      // Responsive slider dimensions - perfectly centered
-                                      "w-3.5 h-3.5 sm:w-4 sm:h-4 top-1/2 left-0.5 sm:left-1 -translate-y-1/2"
-                                    }`}
-                                  />
-                                </span>
-                              </div>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                  );
-                })}
-              </div>
-
-              {/* Save Button and Status */}
-              <div className="flex flex-col items-center">
-                {saveStatus.type && (
-                  <div
-                    className={`mb-4 py-3 px-6 rounded-lg text-center ${
-                      saveStatus.type === "success"
-                        ? "bg-green-500/10 border border-green-500/20 text-green-400"
-                        : "bg-red-500/10 border border-red-500/20 text-red-400"
-                    }`}
+              {/* Save Button */}
+              {total > 0 && (
+                <div className="text-center">
+                  <button
+                    onClick={saveBlueprintSelections}
+                    disabled={loadingState.saving || !hasChanges}
+                    className="bg-gradient-to-r from-[#00c6ff] to-[#0099cc] text-white border-none py-4 px-8 rounded-xl font-semibold text-base transition-all hover:-translate-y-0.5 hover:shadow-lg shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none min-w-[200px]"
                   >
-                    {saveStatus.message}
-                  </div>
-                )}
+                    {loadingState.saving ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <LoadingSpinner size="sm" />
+                        <span>Saving...</span>
+                      </div>
+                    ) : hasChanges ? (
+                      `Save Changes (${selected})`
+                    ) : (
+                      `No Changes to Save`
+                    )}
+                  </button>
 
-                <button
-                  onClick={saveBlueprints}
-                  disabled={loadingState.saving}
-                  className="bg-gradient-to-r from-[#00c6ff] to-[#0072ff] text-white border-none py-4 px-8 rounded-xl font-semibold text-base transition-all hover:-translate-y-0.5 hover:shadow-lg shadow-md disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0 relative"
-                >
-                  {loadingState.saving ? (
-                    <span className="flex items-center justify-center">
-                      <LoadingSpinner size="sm" className="mr-2" />
-                      Saving...
-                    </span>
-                  ) : (
-                    "Save Blueprint Selection"
-                  )}
-                </button>
-              </div>
+                  {/* Save Status Message */}
+                  <AnimatePresence>
+                    {saveStatus.message && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className={`mt-4 p-3 rounded-lg text-sm font-medium ${
+                          saveStatus.type === "success"
+                            ? "bg-green-500/10 border border-green-500/20 text-green-400"
+                            : "bg-red-500/10 border border-red-500/20 text-red-400"
+                        }`}
+                      >
+                        {saveStatus.message}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
             </>
           )}
         </div>
       </div>
+
+      {/* Onboarding Tour */}
+      <AnimatePresence>
+        {showOnboarding && (
+          <OnboardingTooltip
+            step={TOUR_STEPS[currentTourStep]}
+            isVisible={showOnboarding}
+            onNext={handleNextTourStep}
+            onSkip={handleSkipTour}
+            currentStep={currentTourStep}
+            totalSteps={TOUR_STEPS.length}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

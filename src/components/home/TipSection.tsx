@@ -10,7 +10,7 @@ const tips = [
   "Always smelt ores before selling. Raw ore has no value",
   "Group up to run high-volume ore trips or protect each other from gangs — safer and faster.",
   "Use T (On PC) for push-to-talk. Good comms can defuse tense RP moments.",
-  "A Positive+++ reputation gives you up to 19% market purchases!",
+  "A Positive+++ reputation gives you up to 19% OFF market purchases!",
   "Avoid RDM, VDM, CL, and Metagaming — all bannable offenses. Read the rules!",
   "No tools needed to gather resources.",
   "Buy larger trucks like the M923A1 Transport Truck for 50+ ore capacity.",

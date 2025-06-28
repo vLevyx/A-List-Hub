@@ -24,7 +24,8 @@ const config: Config = {
         }
       },
       fontFamily: {
-        sans: ['Outfit', 'system-ui', 'sans-serif'],
+        // ✅ KEEP: Enhanced font family with CSS variable support
+        sans: ['var(--font-outfit)', 'Outfit', 'system-ui', 'sans-serif'],
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-in-out',
