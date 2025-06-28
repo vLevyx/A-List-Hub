@@ -628,14 +628,6 @@ export default function WhitelistPage() {
             </div>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="mt-8 sm:mt-12 text-center text-white/60 px-4">
-          <p className="text-xs sm:text-sm break-words">
-            © 2024 A-List Hub. All rights reserved. | 
-            <span className="text-[#ffd700] ml-1">Elite Gaming Experience</span>
-          </p>
-        </div>
       </div>
 
       <style jsx>{`
