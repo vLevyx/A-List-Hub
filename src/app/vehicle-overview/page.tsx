@@ -244,6 +244,8 @@ export default function VehicleOverviewPage() {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
   const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
+  const [isFilterBarVisible, setIsFilterBarVisible] = useState(true)
+  const [lastScrollY, setLastScrollY] = useState(0)
 
   // Refs
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -352,6 +354,49 @@ export default function VehicleOverviewPage() {
     setTimeout(() => setSelectedVehicle(null), 300)
   }, [])
 
+  // Handle scroll for filter bar visibility
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY
+      const heroSectionHeight = 600 // Approximate hero section height
+      
+      // Only hide/show filter bar after scrolling past hero section
+      if (currentScrollY > heroSectionHeight) {
+        if (currentScrollY > lastScrollY && currentScrollY > heroSectionHeight + 100) {
+          // Scrolling down - hide filter bar
+          setIsFilterBarVisible(false)
+          setShowFilters(false) // Close sort dropdown when hiding
+        } else if (currentScrollY < lastScrollY) {
+          // Scrolling up - show filter bar
+          setIsFilterBarVisible(true)
+        }
+      } else {
+        // Always show filter bar when in hero section
+        setIsFilterBarVisible(true)
+      }
+      
+      setLastScrollY(currentScrollY)
+    }
+
+    // Throttle scroll events for better performance
+    let ticking = false
+    const throttledHandleScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          handleScroll()
+          ticking = false
+        })
+        ticking = true
+      }
+    }
+
+    window.addEventListener('scroll', throttledHandleScroll, { passive: true })
+    
+    return () => {
+      window.removeEventListener('scroll', throttledHandleScroll)
+    }
+  }, [lastScrollY])
+
   // Handle escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -382,11 +427,11 @@ export default function VehicleOverviewPage() {
           <div className="text-center mb-12">
             <h1 className="text-5xl md:text-6xl font-black mb-6">
               <span className="bg-gradient-to-r from-[#00c6ff] via-[#0099ff] to-[#0072ff] bg-clip-text text-transparent">
-                Vehicle Overview
+                Vehicle Arsenal
               </span>
             </h1>
             <p className="text-xl text-white/70 max-w-2xl mx-auto">
-              Discover and compare every vehicle on ELAN.
+              Discover and compare every vehicle in the fleet. From armored transports to specialized equipment.
             </p>
           </div>
 
@@ -428,18 +473,20 @@ export default function VehicleOverviewPage() {
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="sticky top-0 z-40 bg-[#121212]/80 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex flex-col lg:flex-row gap-4 items-center">
+      <div className={`sticky top-0 z-40 bg-[#121212]/80 backdrop-blur-xl border-b border-white/10 transition-transform duration-300 ease-in-out ${
+        isFilterBarVisible ? 'translate-y-0' : '-translate-y-full'
+      }`}>
+        <div className="max-w-7xl mx-auto px-4 py-4 md:py-6">
+          <div className="flex flex-col lg:flex-row gap-3 md:gap-4 items-center">
             {/* Search */}
-            <div className="relative flex-1 max-w-md">
+            <div className="relative flex-1 max-w-md w-full">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/50" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => handleSearchInput(e.target.value)}
                 placeholder="Search vehicles, usage, or dealer..."
-                className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:border-[#00c6ff] focus:ring-2 focus:ring-[#00c6ff]/20 transition-all"
+                className="w-full pl-12 pr-4 py-2.5 md:py-3 bg-white/5 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:border-[#00c6ff] focus:ring-2 focus:ring-[#00c6ff]/20 transition-all text-sm md:text-base"
               />
               {searchTerm && (
                 <button
@@ -451,35 +498,37 @@ export default function VehicleOverviewPage() {
               )}
             </div>
 
-            {/* Category Filters */}
-            <div className="flex flex-wrap gap-2">
-              {(['all', ...Object.keys(VEHICLE_CATEGORIES)] as CategoryFilter[]).map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setCategoryFilter(category)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    categoryFilter === category
-                      ? 'bg-gradient-to-r from-[#00c6ff] to-[#0072ff] text-white shadow-lg'
-                      : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  {category === 'all' ? 'All' : category.charAt(0).toUpperCase() + category.slice(1)}
-                </button>
-              ))}
+            {/* Category Filters - Scrollable on mobile */}
+            <div className="w-full lg:w-auto overflow-x-auto scrollbar-hide">
+              <div className="flex gap-2 min-w-max lg:flex-wrap lg:min-w-0">
+                {(['all', ...Object.keys(VEHICLE_CATEGORIES)] as CategoryFilter[]).map((category) => (
+                  <button
+                    key={category}
+                    onClick={() => setCategoryFilter(category)}
+                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-all whitespace-nowrap ${
+                      categoryFilter === category
+                        ? 'bg-gradient-to-r from-[#00c6ff] to-[#0072ff] text-white shadow-lg'
+                        : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    {category === 'all' ? 'All' : category.charAt(0).toUpperCase() + category.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Sort Options */}
-            <div className="flex items-center gap-2">
+            <div className="relative flex items-center gap-2">
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg transition-all"
+                className="flex items-center gap-2 px-3 md:px-4 py-1.5 md:py-2 bg-white/5 hover:bg-white/10 rounded-lg transition-all text-xs md:text-sm whitespace-nowrap"
               >
                 <Filter className="w-4 h-4" />
                 Sort
               </button>
               
               {showFilters && (
-                <div className="absolute top-full mt-2 right-0 bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/20 rounded-xl p-2 shadow-2xl z-50">
+                <div className="absolute top-full mt-2 right-0 bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/20 rounded-xl p-2 shadow-2xl z-50 min-w-[180px]">
                   {[
                     { value: 'price-asc', label: 'Price: Low to High' },
                     { value: 'price-desc', label: 'Price: High to Low' },
@@ -507,7 +556,7 @@ export default function VehicleOverviewPage() {
           </div>
 
           {/* Results Counter */}
-          <div className="mt-4 text-white/60 text-sm">
+          <div className="mt-3 md:mt-4 text-white/60 text-xs md:text-sm">
             Showing {filteredAndSortedVehicles.length} of {VEHICLES.length} vehicles
           </div>
         </div>
@@ -770,6 +819,21 @@ export default function VehicleOverviewPage() {
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
+        }
+
+        /* Hide scrollbar for horizontal scroll on mobile */
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+
+        /* Ensure smooth transitions */
+        * {
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
         }
       `}</style>
     </div>
