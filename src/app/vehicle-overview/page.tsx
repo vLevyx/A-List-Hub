@@ -427,11 +427,11 @@ export default function VehicleOverviewPage() {
           <div className="text-center mb-12">
             <h1 className="text-5xl md:text-6xl font-black mb-6">
               <span className="bg-gradient-to-r from-[#00c6ff] via-[#0099ff] to-[#0072ff] bg-clip-text text-transparent">
-                Vehicle Arsenal
+                Vehicle Overview
               </span>
             </h1>
             <p className="text-xl text-white/70 max-w-2xl mx-auto">
-              Discover and compare every vehicle in the fleet. From armored transports to specialized equipment.
+              Discover and compare every vehicle in ELAN.
             </p>
           </div>
 
