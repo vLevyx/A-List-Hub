@@ -285,7 +285,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const {
         data: { session },
         error,
-      } = await supabase.auth.getSession();
+      } = await withTimeout(supabase.auth.getSession());
 
       if (error) {
         throw error;
@@ -326,16 +326,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
 
       // Retry logic
-      if (retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
-        retryAttemptsRef.current++;
-        setTimeout(getSession, RETRY_DELAY * retryAttemptsRef.current);
-      } else {
-        // After max retries, ensure loading is set to false
-        setState((prev) => ({ ...prev, loading: false }));
-        console.error(
-          "Max retry attempts reached in getSession. Stopping further retries and setting loading to false."
-        );
-      }
+      // if (retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
+      //   retryAttemptsRef.current++;
+      //   setTimeout(getSession, RETRY_DELAY * retryAttemptsRef.current);
+      // } else {
+      //   // After max retries, ensure loading is set to false
+      //   setState((prev) => ({ ...prev, loading: false }));
+      //   console.error(
+      //     "Max retry attempts reached in getSession. Stopping further retries and setting loading to false."
+      //   );
+      // }
     } finally {
       setState((prev) => ({ ...prev, loading: false }));
     }
