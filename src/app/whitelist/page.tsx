@@ -30,7 +30,11 @@ interface UserStatus {
 
 export default function WhitelistPage() {
   usePageTracking();
-  const { user, loading: authLoading, signInWithDiscord } = useAuth();
+  
+  // Get auth state but don't let it block the page render
+  const { user, signInWithDiscord } = useAuth();
+  
+  // Create supabase client only when needed
   const supabase = createClient();
 
   // Form state
@@ -42,7 +46,7 @@ export default function WhitelistPage() {
     message: string;
   }>({ type: null, message: "" });
 
-  // User status state - with proper initialization
+  // User status state - initialize with safe defaults
   const [userData, setUserData] = useState<any>(null);
   const [userStatus, setUserStatus] = useState<UserStatus>({
     type: "not_logged_in",
@@ -50,59 +54,63 @@ export default function WhitelistPage() {
     showCountdown: false,
   });
   const [isLoadingUserData, setIsLoadingUserData] = useState(false);
+  const [hasAttemptedDataFetch, setHasAttemptedDataFetch] = useState(false);
 
-  // Non-blocking user data fetch - runs in background
+  // Background user data fetch - only when user exists and we haven't tried yet
   useEffect(() => {
-    const fetchUserData = async () => {
-      // Don't fetch if no user or still loading auth
-      if (!user || authLoading) {
-        return;
-      }
+    // Skip if no user, already loading, or already attempted
+    if (!user || isLoadingUserData || hasAttemptedDataFetch) {
+      return;
+    }
 
+    const fetchUserData = async () => {
       setIsLoadingUserData(true);
+      setHasAttemptedDataFetch(true);
 
       try {
         const discordId = getDiscordId(user);
         if (!discordId) {
-          console.warn("Could not determine Discord ID");
-          setIsLoadingUserData(false);
+          console.warn("Could not determine Discord ID for whitelist page");
           return;
         }
 
-        // Use a shorter timeout for better UX
+        // Use shorter timeout to prevent blocking
         const { data, error } = await withTimeout(
           supabase
             .from("users")
             .select("hub_trial, revoked, trial_expiration")
             .eq("discord_id", discordId)
             .single(),
-          5000 // 5 second timeout instead of default
+          3000 // 3 second timeout
         );
 
         if (error && error.code !== "PGRST116") {
-          console.error("Error fetching user data:", error);
-          // Don't show error to user, just continue with default state
-          setIsLoadingUserData(false);
+          console.error("Error fetching user data for whitelist:", error);
+          // Don't throw - just continue with default state
           return;
         }
 
-        setUserData(
-          data || { hub_trial: false, revoked: true, trial_expiration: null }
-        );
+        const userDataResult = data || { 
+          hub_trial: false, 
+          revoked: true, 
+          trial_expiration: null 
+        };
+
+        setUserData(userDataResult);
       } catch (error) {
-        console.error("Failed to fetch user data:", error);
-        // Silently fail and continue with default state
+        console.error("Failed to fetch user data for whitelist:", error);
+        // Silently fail - user can still see the page
       } finally {
         setIsLoadingUserData(false);
       }
     };
 
-    // Add a small delay to prevent blocking initial render
-    const timeoutId = setTimeout(fetchUserData, 100);
+    // Small delay to prevent blocking initial render
+    const timeoutId = setTimeout(fetchUserData, 150);
     return () => clearTimeout(timeoutId);
-  }, [user, authLoading, supabase]);
+  }, [user, isLoadingUserData, hasAttemptedDataFetch, supabase]);
 
-  // Determine user status - only update when user data changes
+  // Determine user status based on auth and user data
   useEffect(() => {
     if (!user) {
       setUserStatus({
@@ -113,16 +121,22 @@ export default function WhitelistPage() {
       return;
     }
 
-    // If still loading user data, show a loading state for the form section only
-    if (isLoadingUserData) {
+    // If we haven't attempted to fetch data yet, show loading state
+    if (!hasAttemptedDataFetch) {
       setUserStatus({
-        type: "not_logged_in", // Temporary state while loading
+        type: "not_logged_in", // Temporary state
         showForm: false,
         showCountdown: false,
       });
       return;
     }
 
+    // If still loading user data, keep current status or show eligible
+    if (isLoadingUserData) {
+      return; // Don't change status while loading
+    }
+
+    // Determine status based on user data
     if (userData) {
       const now = new Date();
       const isTrialActive =
@@ -167,7 +181,7 @@ export default function WhitelistPage() {
         showCountdown: false,
       });
     }
-  }, [userData, user, isLoadingUserData]);
+  }, [user, userData, isLoadingUserData, hasAttemptedDataFetch]);
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -204,14 +218,18 @@ export default function WhitelistPage() {
       }
 
       // Calculate trial end time (7 days from now in Unix timestamp)
-      const trialEnds =
-        Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+      const trialEnds = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
 
+      // Get session token for API call
       const { data: sessionData } = await withTimeout(
         supabase.auth.getSession(),
-        10000 // 10 second timeout for form submission
+        8000 // 8 second timeout
       );
       const token = sessionData.session?.access_token;
+
+      if (!token) {
+        throw new Error("Authentication token not available");
+      }
 
       const response = await withTimeout(
         fetch(
@@ -231,11 +249,11 @@ export default function WhitelistPage() {
             }),
           }
         ),
-        15000 // 15 second timeout for webhook
+        12000 // 12 second timeout for webhook
       );
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || "Failed to activate trial");
       }
 
@@ -246,7 +264,7 @@ export default function WhitelistPage() {
       setIgn("");
       setReferral("");
 
-      // Reload the page after a short delay
+      // Reload the page after success
       setTimeout(() => {
         window.location.reload();
       }, 2000);
@@ -307,7 +325,7 @@ export default function WhitelistPage() {
     );
   };
 
-  // Status message based on user status
+  // Status message component
   const StatusMessage = ({ status }: { status: UserStatus }) => {
     const messages = {
       whitelisted_trial: {
@@ -353,17 +371,17 @@ export default function WhitelistPage() {
     );
   };
 
-  // Loading state for user-specific sections only
+  // Small loading indicator for form section only
   const FormSectionLoader = () => (
-    <div className="flex items-center justify-center py-8">
+    <div className="flex items-center justify-center py-6">
       <div className="flex items-center gap-3 text-white/60">
-        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-[#ffd700]"></div>
-        <span className="text-sm">Loading your account status...</span>
+        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-[#ffd700]"></div>
+        <span className="text-sm">Checking account status...</span>
       </div>
     </div>
   );
 
-  // Show main content immediately - no more blocking loading screen
+  // Always render the page - no blocking loading states
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0c0c0c] via-[#1a1a2e] to-[#16213e] bg-fixed relative overflow-hidden">
       {/* Animated background elements */}
@@ -374,7 +392,7 @@ export default function WhitelistPage() {
       </div>
 
       <div className="container max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen flex flex-col justify-center items-center relative z-10">
-        {/* Hero Section */}
+        {/* Hero Section - Always visible */}
         <div className="text-center mb-8 sm:mb-12 animate-fade-in-up">
           <div className="relative inline-block mb-6 sm:mb-8">
             <div className="absolute inset-0 bg-[#ffd700]/20 rounded-full blur-2xl animate-pulse-soft scale-150"></div>
@@ -401,7 +419,7 @@ export default function WhitelistPage() {
           </p>
         </div>
 
-        {/* Main Card */}
+        {/* Main Card - Always visible */}
         <div className="w-full max-w-4xl bg-black/40 backdrop-blur-2xl border border-white/20 rounded-3xl overflow-hidden shadow-2xl animate-fade-in-up-delayed">
           {/* Gradient border effect */}
           <div className="relative p-1 bg-gradient-to-r from-[#ffd700] via-purple-500 to-blue-500 rounded-3xl">
@@ -472,7 +490,7 @@ export default function WhitelistPage() {
                 </div>
               </div>
 
-              {/* Form Section - Only this part shows loading state */}
+              {/* Form Section */}
               <div className="bg-gradient-to-br from-white/5 to-white/10 border border-white/20 rounded-2xl p-4 sm:p-6 lg:p-8 backdrop-blur-sm">
                 <div className="text-center mb-6 sm:mb-8">
                   <h3 className="text-2xl sm:text-3xl font-bold text-[#ffd700] mb-2 flex items-center justify-center gap-3 flex-wrap">
@@ -482,22 +500,20 @@ export default function WhitelistPage() {
                   <p className="text-white/80 text-base sm:text-lg break-words">Ready to join the elite? Let's get started!</p>
                 </div>
 
-                {/* Show loading state only for the form section when fetching user data */}
-                {user && isLoadingUserData ? (
+                {/* Show small loading indicator only while fetching user data */}
+                {user && isLoadingUserData && !userData ? (
                   <FormSectionLoader />
                 ) : (
                   <>
-                    {userStatus && (
-                      <div className="mb-6 sm:mb-8">
-                        <StatusMessage status={userStatus} />
+                    <div className="mb-6 sm:mb-8">
+                      <StatusMessage status={userStatus} />
 
-                        {userStatus.showCountdown && userData?.trial_expiration && (
-                          <CountdownTimer expirationTime={userData.trial_expiration} />
-                        )}
-                      </div>
-                    )}
+                      {userStatus.showCountdown && userData?.trial_expiration && (
+                        <CountdownTimer expirationTime={userData.trial_expiration} />
+                      )}
+                    </div>
 
-                    {userStatus?.type === "not_logged_in" ? (
+                    {userStatus.type === "not_logged_in" ? (
                       <div className="text-center">
                         <button
                           onClick={signInWithDiscord}
@@ -519,7 +535,7 @@ export default function WhitelistPage() {
                           <span className="break-words">Connect with Discord</span>
                         </button>
                       </div>
-                    ) : userStatus?.showForm ? (
+                    ) : userStatus.showForm ? (
                       <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
                         <div>
                           <label htmlFor="ign" className="block text-white/90 font-semibold text-base sm:text-lg mb-3">
@@ -589,7 +605,7 @@ export default function WhitelistPage() {
                       </form>
                     ) : (
                       <div className="text-center py-8 sm:py-12">
-                        {userStatus?.type === "whitelisted" && (
+                        {userStatus.type === "whitelisted" && (
                           <div className="space-y-4">
                             <div className="text-5xl sm:text-6xl mb-4">🎉</div>
                             <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
@@ -601,7 +617,7 @@ export default function WhitelistPage() {
                           </div>
                         )}
 
-                        {userStatus?.type === "whitelisted_trial" && (
+                        {userStatus.type === "whitelisted_trial" && (
                           <div className="space-y-4">
                             <div className="text-5xl sm:text-6xl mb-4">⏳</div>
                             <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
@@ -613,7 +629,7 @@ export default function WhitelistPage() {
                           </div>
                         )}
 
-                        {userStatus?.type === "active_trial" && (
+                        {userStatus.type === "active_trial" && (
                           <div className="space-y-4">
                             <div className="text-5xl sm:text-6xl mb-4">⏳</div>
                             <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
@@ -625,7 +641,7 @@ export default function WhitelistPage() {
                           </div>
                         )}
 
-                        {userStatus?.type === "expired_trial" && (
+                        {userStatus.type === "expired_trial" && (
                           <div className="space-y-4">
                             <div className="text-5xl sm:text-6xl mb-4">⏰</div>
                             <h3 className="text-xl sm:text-2xl font-bold text-red-400 mb-2">
