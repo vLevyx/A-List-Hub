@@ -203,6 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const retryAttemptsRef = useRef(0);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const initialLoadAttemptedRef = useRef(false);
+  const realtimeChannelRef = useRef<any>(null);
 
   const supabase = createClient();
 
@@ -215,7 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const cached = localStorage.getItem(AUTH_CACHE_KEY);
       if (cached) {
         const { data, timestamp } = JSON.parse(cached);
-        console.log(data);
+        console.log("Cached auth data found:", data);
         const isExpired = Date.now() - timestamp > AUTH_CACHE_TTL;
 
         if (!isExpired && data.user) {
@@ -329,7 +330,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
     } finally {
       setIsRefreshing(false);
-      setState((prev) => ({ ...prev, loading: false }));
     }
   }, [state.session, checkUserAccess]);
 
@@ -365,6 +365,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     try {
       setError(null);
+      
+      // Clean up realtime subscription before signing out
+      if (realtimeChannelRef.current) {
+        memoizedSupabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
+
       const { error } = await withTimeout(memoizedSupabase.auth.signOut());
       if (error) throw error;
 
@@ -407,9 +414,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [memoizedSupabase, router]);
 
-  // Define getSession at component level - memoized
+  // Define getSession at component level - memoized and stabilized
   const getSession = useCallback(async () => {
-    console.log("called");
+    console.log("getSession called");
     try {
       setState((prev) => ({ ...prev, loading: true }));
       setError(null);
@@ -450,6 +457,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setState((prev) => ({ ...prev, loading: false }));
       }
+      
+      // Reset retry attempts on successful session
+      retryAttemptsRef.current = 0;
+      
     } catch (error) {
       console.error("Error in getSession:", error);
       setState((prev) => ({ ...prev, loading: false }));
@@ -468,37 +479,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           "Max retry attempts reached in getSession. Stopping further retries and setting loading to false."
         );
       }
-    } finally {
-      setState((prev) => ({ ...prev, loading: false }));
     }
   }, [memoizedSupabase, checkUserAccess]);
 
   // Initialize auth state
   useEffect(() => {
-    getSession();
+    let mounted = true;
+    
+    if (mounted) {
+      getSession();
+    }
 
-    // Set up auth state change listener
+    // Set up auth state change listener with error handling
     const {
       data: { subscription },
     } = memoizedSupabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      
+      console.log("Auth state change:", event);
+      
       if (event === "INITIAL_SESSION" && session?.user) {
         // Only track login if we're on the OAuth callback URL with success parameter
         const isSuccessfulAuth =
-          window.location.search.includes("?auth=success");
+          typeof window !== 'undefined' && window.location.search.includes("?auth=success");
 
         if (isSuccessfulAuth) {
           const discordId = getDiscordId(session.user);
           const username = session.user.user_metadata?.full_name;
 
           if (discordId) {
-            await memoizedSupabase.rpc("upsert_user_login", {
-              target_discord_id: discordId,
-              user_name: username,
-            });
+            try {
+              await memoizedSupabase.rpc("upsert_user_login", {
+                target_discord_id: discordId,
+                user_name: username,
+              });
 
-            // Remove the auth parameter from URL without page refresh
-            const newUrl = window.location.pathname;
-            router.replace(newUrl);
+              // Remove the auth parameter from URL without page refresh
+              const newUrl = window.location.pathname;
+              router.replace(newUrl);
+            } catch (error) {
+              console.error("Error tracking login:", error);
+            }
           }
         }
 
@@ -536,6 +557,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           );
         }
       } else if (event === "SIGNED_OUT") {
+        // Clean up realtime subscription
+        if (realtimeChannelRef.current) {
+          memoizedSupabase.removeChannel(realtimeChannelRef.current);
+          realtimeChannelRef.current = null;
+        }
+
         // Clear auth cache
         localStorage.removeItem(AUTH_CACHE_KEY);
         localStorage.removeItem("profile_data_cache");
@@ -560,38 +587,78 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
       }
+      // Clean up realtime subscription
+      if (realtimeChannelRef.current) {
+        memoizedSupabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
     };
-  }, [getSession, memoizedSupabase, router, checkUserAccess, state.session, state.hasAccess, state.isTrialActive]);
+  }, [getSession, memoizedSupabase, router, checkUserAccess]);
 
-  // Set up real-time subscription for user access changes
+  // Set up real-time subscription for user access changes with better error handling
   useEffect(() => {
-    if (!state.user) return;
+    if (!state.user) {
+      // Clean up existing subscription if user is not present
+      if (realtimeChannelRef.current) {
+        memoizedSupabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
+      return;
+    }
 
     const discordId = getDiscordId(state.user);
     if (!discordId) return;
 
-    const channel = memoizedSupabase
-      .channel("user-access-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "users",
-          filter: `discord_id=eq.${discordId}`,
-        },
-        async () => {
-          await refreshUserDataInternal();
-        }
-      )
-      .subscribe();
+    // Clean up existing subscription before creating new one
+    if (realtimeChannelRef.current) {
+      memoizedSupabase.removeChannel(realtimeChannelRef.current);
+    }
+
+    try {
+      const channel = memoizedSupabase
+        .channel(`user-access-changes-${discordId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "users",
+            filter: `discord_id=eq.${discordId}`,
+          },
+          async (payload) => {
+            console.log("Real-time user access change detected:", payload);
+            try {
+              await refreshUserDataInternal();
+            } catch (error) {
+              console.error("Error handling real-time update:", error);
+            }
+          }
+        )
+        .subscribe((status, err) => {
+          if (err) {
+            console.error("Real-time subscription error:", err);
+            // Don't throw error, just log it
+          } else {
+            console.log("Real-time subscription status:", status);
+          }
+        });
+
+      realtimeChannelRef.current = channel;
+    } catch (error) {
+      console.error("Error setting up real-time subscription:", error);
+      // Continue without real-time updates if subscription fails
+    }
 
     return () => {
-      memoizedSupabase.removeChannel(channel);
+      if (realtimeChannelRef.current) {
+        memoizedSupabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
     };
   }, [state.user, memoizedSupabase, refreshUserDataInternal]);
 
