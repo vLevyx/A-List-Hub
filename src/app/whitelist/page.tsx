@@ -7,7 +7,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { createClient } from "@/lib/supabase/client";
 import { getDiscordId } from "@/lib/utils";
-import { withTimeout } from "@/lib/timeout";
 
 // Configuration
 const DISCOUNT_ENABLED = false;
@@ -15,6 +14,10 @@ const ORIGINAL_PRICE = 2500000;
 const DISCOUNT_RATE = 0.15;
 const DISCOUNTED_PRICE = ORIGINAL_PRICE * (1 - DISCOUNT_RATE);
 const TRIAL_DAYS = 7;
+
+// Mobile-optimized timeout settings
+const MOBILE_TIMEOUT = 3000; // 3 seconds for mobile
+const DESKTOP_TIMEOUT = 5000; // 5 seconds for desktop
 
 interface UserStatus {
   type:
@@ -27,6 +30,12 @@ interface UserStatus {
   showForm: boolean;
   showCountdown: boolean;
 }
+
+// Detect if device is mobile
+const isMobile = () => {
+  if (typeof window === 'undefined') return false;
+  return window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
 
 export default function WhitelistPage() {
   usePageTracking();
@@ -47,65 +56,96 @@ export default function WhitelistPage() {
   const [userData, setUserData] = useState<any>(null);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const [isLoadingUserData, setIsLoadingUserData] = useState(false);
+  const [dataFetchAttempted, setDataFetchAttempted] = useState(false);
 
-  // Load user data - don't create new supabase client for auth
+  // Mobile-optimized data fetching with shorter timeout and better error handling
   useEffect(() => {
+    let isCancelled = false;
+    
     const fetchUserData = async () => {
-      setIsLoadingUserData(true);
-
-      if (!user) {
-        setUserStatus({
-          type: "not_logged_in",
-          showForm: false,
-          showCountdown: false,
-        });
-        setIsLoadingUserData(false);
+      // If we already attempted or still loading auth, skip
+      if (dataFetchAttempted || authLoading || !user) {
+        if (!user) {
+          setUserStatus({
+            type: "not_logged_in",
+            showForm: false,
+            showCountdown: false,
+          });
+        }
         return;
       }
+
+      setIsLoadingUserData(true);
+      setDataFetchAttempted(true);
 
       try {
         const discordId = getDiscordId(user);
         if (!discordId) {
-          setStatusMessage({
-            type: "error",
-            message: "Could not determine Discord ID",
-          });
-          setIsLoadingUserData(false);
+          console.warn("Could not determine Discord ID for whitelist");
+          // Don't show error to user, just default to eligible
+          if (!isCancelled) {
+            setUserStatus({
+              type: "eligible",
+              showForm: true,
+              showCountdown: false,
+            });
+          }
           return;
         }
 
-        // Create supabase client only for data fetching, not auth
+        // Create supabase client only for data fetching
         const supabase = createClient();
         
-        const { data, error } = await withTimeout(
-          supabase
-            .from("users")
-            .select("hub_trial, revoked, trial_expiration")
-            .eq("discord_id", discordId)
-            .single()
+        // Use shorter timeout for mobile devices
+        const timeoutMs = isMobile() ? MOBILE_TIMEOUT : DESKTOP_TIMEOUT;
+        
+        // Create a promise with race condition for timeout
+        const fetchPromise = supabase
+          .from("users")
+          .select("hub_trial, revoked, trial_expiration")
+          .eq("discord_id", discordId)
+          .single();
+
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout')), timeoutMs)
         );
+
+        const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
+
+        // If component unmounted, don't update state
+        if (isCancelled) return;
 
         if (error && error.code !== "PGRST116") {
-          console.error("Error fetching user data:", error);
-          setIsLoadingUserData(false);
-          return;
+          console.warn("Non-critical error fetching user data:", error);
+          // Default to eligible state instead of showing error
+          setUserData({ hub_trial: false, revoked: true, trial_expiration: null });
+        } else {
+          setUserData(data || { hub_trial: false, revoked: true, trial_expiration: null });
         }
 
-        setUserData(
-          data || { hub_trial: false, revoked: true, trial_expiration: null }
-        );
-        setIsLoadingUserData(false);
       } catch (error) {
-        console.error("Failed to fetch user data:", error);
-        setIsLoadingUserData(false);
+        console.warn("User data fetch failed, using default state:", error);
+        // Default to eligible state for better UX
+        if (!isCancelled) {
+          setUserData({ hub_trial: false, revoked: true, trial_expiration: null });
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingUserData(false);
+        }
       }
     };
 
-    // Only fetch when authLoading is false and user state is stable
+    // Only run when auth is stable and user is defined
     if (!authLoading && user !== undefined) {
       fetchUserData();
     }
-  }, [user, authLoading]);
+
+    // Cleanup function
+    return () => {
+      isCancelled = true;
+    };
+  }, [user, authLoading, dataFetchAttempted]);
 
   // Determine user status
   useEffect(() => {
@@ -157,7 +197,7 @@ export default function WhitelistPage() {
     }
   }, [userData, user]);
 
-  // Handle form submission - use session from useAuth context
+  // Handle form submission with mobile optimization
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -194,35 +234,42 @@ export default function WhitelistPage() {
       // Calculate trial end time (7 days from now in Unix timestamp)
       const trialEnds = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
 
-      // Use session token from auth context - no additional auth calls
+      // Use session token from auth context
       const token = session.access_token;
 
       if (!token) {
         throw new Error("Authentication token not available");
       }
 
-      const response = await withTimeout(
-        fetch(
-          "https://dsexkdjxmhgqahrlkvax.functions.supabase.co/sendDiscordWebhook",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              discordId,
-              discordUsername,
-              ign,
-              referral: referral.trim() || "None",
-              trialEnds,
-            }),
-          }
-        )
+      // Mobile-optimized fetch with shorter timeout
+      const fetchTimeoutMs = isMobile() ? 8000 : 12000;
+      
+      const fetchPromise = fetch(
+        "https://dsexkdjxmhgqahrlkvax.functions.supabase.co/sendDiscordWebhook",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            discordId,
+            discordUsername,
+            ign,
+            referral: referral.trim() || "None",
+            trialEnds,
+          }),
+        }
       );
 
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), fetchTimeoutMs)
+      );
+
+      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || "Failed to activate trial");
       }
 
@@ -233,7 +280,7 @@ export default function WhitelistPage() {
       setIgn("");
       setReferral("");
 
-      // Reload the page after a short delay
+      // Reload the page after success
       setTimeout(() => {
         window.location.reload();
       }, 2000);
@@ -821,6 +868,24 @@ export default function WhitelistPage() {
           .animate-pulse-soft,
           .animate-pulse-slow {
             will-change: transform, opacity;
+          }
+        }
+
+        /* Mobile-specific performance optimizations */
+        @media (max-width: 768px) {
+          /* Reduce GPU usage on mobile */
+          .animate-float,
+          .animate-float-delayed {
+            animation-duration: 8s;
+          }
+          
+          /* Simplify blur effects on mobile */
+          .backdrop-blur-xl {
+            backdrop-filter: blur(8px);
+          }
+          
+          .backdrop-blur-2xl {
+            backdrop-filter: blur(12px);
           }
         }
       `}</style>
