@@ -326,7 +326,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
 
       // Retry logic
-      if (retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
+      if (retryAttemptsRef.current < 5) {
         retryAttemptsRef.current++;
         setTimeout(getSession, RETRY_DELAY * retryAttemptsRef.current);
       } else {
