@@ -14,7 +14,7 @@ const DISCOUNT_ENABLED = false;
 const ORIGINAL_PRICE = 2500000;
 const DISCOUNT_RATE = 0.15;
 const DISCOUNTED_PRICE = ORIGINAL_PRICE * (1 - DISCOUNT_RATE);
-const TRIAL_DAYS = 3;
+const TRIAL_DAYS = 7;
 
 interface UserStatus {
   type:
@@ -31,9 +31,8 @@ interface UserStatus {
 export default function WhitelistPage() {
   usePageTracking();
   
-  // Follow the exact same pattern as other pages
-  const { user, loading: authLoading, signInWithDiscord } = useAuth();
-  const supabase = createClient();
+  // Only use what we need from useAuth - no auth state manipulation
+  const { user, loading: authLoading, signInWithDiscord, session } = useAuth();
 
   // Form state
   const [ign, setIgn] = useState("");
@@ -49,7 +48,7 @@ export default function WhitelistPage() {
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const [isLoadingUserData, setIsLoadingUserData] = useState(false);
 
-  // Load user data - exactly like other pages do
+  // Load user data - don't create new supabase client for auth
   useEffect(() => {
     const fetchUserData = async () => {
       setIsLoadingUserData(true);
@@ -75,6 +74,9 @@ export default function WhitelistPage() {
           return;
         }
 
+        // Create supabase client only for data fetching, not auth
+        const supabase = createClient();
+        
         const { data, error } = await withTimeout(
           supabase
             .from("users")
@@ -99,11 +101,11 @@ export default function WhitelistPage() {
       }
     };
 
-    // Only fetch when authLoading is false - same pattern as other pages
-    if (!authLoading) {
+    // Only fetch when authLoading is false and user state is stable
+    if (!authLoading && user !== undefined) {
       fetchUserData();
     }
-  }, [user, authLoading, supabase]);
+  }, [user, authLoading]);
 
   // Determine user status
   useEffect(() => {
@@ -155,7 +157,7 @@ export default function WhitelistPage() {
     }
   }, [userData, user]);
 
-  // Handle form submission
+  // Handle form submission - use session from useAuth context
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -167,7 +169,7 @@ export default function WhitelistPage() {
       return;
     }
 
-    if (!user) {
+    if (!user || !session) {
       setStatusMessage({
         type: "error",
         message: "❌ You must be logged in to request a trial.",
@@ -190,13 +192,14 @@ export default function WhitelistPage() {
       }
 
       // Calculate trial end time (7 days from now in Unix timestamp)
-      const trialEnds =
-        Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+      const trialEnds = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
 
-      const { data: sessionData } = await withTimeout(
-        supabase.auth.getSession()
-      );
-      const token = sessionData.session?.access_token;
+      // Use session token from auth context - no additional auth calls
+      const token = session.access_token;
+
+      if (!token) {
+        throw new Error("Authentication token not available");
+      }
 
       const response = await withTimeout(
         fetch(
@@ -225,7 +228,7 @@ export default function WhitelistPage() {
 
       setStatusMessage({
         type: "success",
-        message: "✅ Trial activated! You now have 72 hours of premium access.",
+        message: "✅ Trial activated! You now have 7 days of premium access.",
       });
       setIgn("");
       setReferral("");
