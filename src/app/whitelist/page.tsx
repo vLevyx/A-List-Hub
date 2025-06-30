@@ -153,96 +153,149 @@ export default function WhitelistPage() {
     }
   }, [userData, user]);
 
-  // Handle form submission
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Handle form submission - FIXED: Added proper dependencies
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
 
-    if (!ign.trim()) {
-      setStatusMessage({
-        type: "error",
-        message: "❌ Please enter your in-game name.",
-      });
-      return;
-    }
+      // Clear any previous status messages
+      setStatusMessage({ type: null, message: "" });
 
-    if (!user) {
-      setStatusMessage({
-        type: "error",
-        message: "❌ You must be logged in to request a trial.",
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-    setStatusMessage({ type: "info", message: "Submitting your request..." });
-
-    try {
-      const discordId = getDiscordId(user);
-      const discordUsername =
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        "Discord User";
-
-      if (!discordId) {
-        throw new Error("Could not determine Discord ID");
+      // Enhanced validation with better user feedback
+      if (!ign.trim()) {
+        setStatusMessage({
+          type: "error",
+          message: "❌ Please enter your in-game name.",
+        });
+        // Focus the IGN input for better UX
+        const ignInput = document.getElementById('ign') as HTMLInputElement;
+        if (ignInput) {
+          ignInput.focus();
+        }
+        return;
       }
 
-      // Calculate trial end time (7 days from now in Unix timestamp)
-      const trialEnds = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+      if (ign.trim().length < 2) {
+        setStatusMessage({
+          type: "error",
+          message: "❌ In-game name must be at least 2 characters long.",
+        });
+        return;
+      }
 
-      const { data: sessionData } = await withTimeout(
-        supabase.auth.getSession()
-      );
-      const token = sessionData.session?.access_token;
+      if (!user) {
+        setStatusMessage({
+          type: "error",
+          message: "❌ You must be logged in to request a trial.",
+        });
+        return;
+      }
 
-      const response = await withTimeout(
-        fetch(
-          "https://dsexkdjxmhgqahrlkvax.functions.supabase.co/sendDiscordWebhook",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              discordId,
-              discordUsername,
-              ign,
-              referral: referral.trim() || "None",
-              trialEnds,
-            }),
+      setIsSubmitting(true);
+      setStatusMessage({ type: "info", message: "🔄 Submitting your request..." });
+
+      try {
+        const discordId = getDiscordId(user);
+        const discordUsername =
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          "Discord User";
+
+        if (!discordId) {
+          throw new Error("Could not determine Discord ID");
+        }
+
+        // Calculate trial end time (7 days from now in Unix timestamp)
+        const trialEnds = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+
+        const { data: sessionData } = await withTimeout(
+          supabase.auth.getSession(),
+          10000 // 10 second timeout
+        );
+        const token = sessionData.session?.access_token;
+
+        if (!token) {
+          throw new Error("Authentication token not found. Please log in again.");
+        }
+
+        const response = await withTimeout(
+          fetch(
+            "https://dsexkdjxmhgqahrlkvax.functions.supabase.co/sendDiscordWebhook",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                discordId,
+                discordUsername,
+                ign: ign.trim(),
+                referral: referral.trim() || "None",
+                trialEnds,
+              }),
+            }
+          ),
+          15000 // 15 second timeout for webhook
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Server error: ${response.status}`);
+        }
+
+        setStatusMessage({
+          type: "success",
+          message: "✅ Trial activated! You now have 7 days of premium access.",
+        });
+        
+        // Clear form
+        setIgn("");
+        setReferral("");
+
+        // Reload the page after a short delay to show updated status
+        setTimeout(() => {
+          window.location.reload();
+        }, 2500);
+      } catch (error) {
+        console.error("Error submitting whitelist request:", error);
+        
+        let errorMessage = "❌ An unexpected error occurred. Please try again later.";
+        
+        if (error instanceof Error) {
+          if (error.message.includes("timeout")) {
+            errorMessage = "❌ Request timeout. Please check your connection and try again.";
+          } else if (error.message.includes("Discord ID")) {
+            errorMessage = "❌ Authentication error. Please log out and log in again.";
+          } else {
+            errorMessage = `❌ ${error.message}`;
           }
-        )
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to activate trial");
+        }
+        
+        setStatusMessage({
+          type: "error",
+          message: errorMessage,
+        });
+      } finally {
+        setIsSubmitting(false);
       }
+    },
+    [ign, referral, user, supabase] // FIXED: Added all dependencies
+  );
 
-      setStatusMessage({
-        type: "success",
-        message: "✅ Trial activated! You now have 72 hours of premium access.",
-      });
-      setIgn("");
-      setReferral("");
-
-      // Reload the page after a short delay
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-    } catch (error) {
-      console.error("Error submitting whitelist request:", error);
-      setStatusMessage({
-        type: "error",
-        message:
-          error instanceof Error
-            ? `❌ ${error.message}`
-            : "❌ An unexpected error occurred. Please try again later.",
-      });
-    } finally {
-      setIsSubmitting(false);
+  // Enhanced input change handlers with better validation
+  const handleIgnChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setIgn(value);
+    
+    // Clear error message when user starts typing
+    if (statusMessage.type === "error" && value.trim()) {
+      setStatusMessage({ type: null, message: "" });
     }
+  }, [statusMessage.type]);
+
+  const handleReferralChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setReferral(e.target.value);
   }, []);
 
   // Countdown timer component
@@ -330,6 +383,8 @@ export default function WhitelistPage() {
             ? "bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/40 text-yellow-300"
             : "bg-gradient-to-r from-red-500/20 to-pink-500/20 border-red-500/40 text-red-300"
         }`}
+        role="alert"
+        aria-live="polite"
       >
         <div className="text-base sm:text-lg font-semibold break-words">
           {message}
@@ -341,7 +396,7 @@ export default function WhitelistPage() {
   if ((loading || isLoading) && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0c0c0c] via-[#1a1a2e] to-[#16213e]">
-        <div className="relative">
+        <div className="relative" role="status" aria-label="Loading">
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#ffd700]"></div>
           <div className="absolute inset-0 animate-ping rounded-full h-16 w-16 border-2 border-[#ffd700]/30"></div>
         </div>
@@ -366,7 +421,7 @@ export default function WhitelistPage() {
             <div className="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto">
               <Image
                 src="https://icons.iconarchive.com/icons/microsoft/fluentui-emoji-3d/512/Crown-3d-icon.png"
-                alt="Crown Icon"
+                alt="Crown Icon representing premium access"
                 width={96}
                 height={96}
                 className="relative z-10 drop-shadow-2xl w-full h-full"
@@ -498,7 +553,8 @@ export default function WhitelistPage() {
                   <div className="text-center">
                     <button
                       onClick={signInWithDiscord}
-                      className="group relative inline-flex items-center justify-center gap-3 py-4 sm:py-6 px-6 sm:px-12 bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold text-lg sm:text-xl rounded-2xl transition-all duration-300 transform hover:scale-105 hover:shadow-2xl w-full sm:w-auto"
+                      className="group relative inline-flex items-center justify-center gap-3 py-4 sm:py-6 px-6 sm:px-12 bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold text-lg sm:text-xl rounded-2xl transition-all duration-300 transform hover:scale-105 hover:shadow-2xl w-full sm:w-auto focus:outline-none focus:ring-4 focus:ring-[#5865F2]/20"
+                      aria-label="Sign in with Discord to access premium features"
                     >
                       <svg
                         width="24"
@@ -507,6 +563,7 @@ export default function WhitelistPage() {
                         fill="none"
                         xmlns="http://www.w3.org/2000/svg"
                         className="group-hover:animate-pulse flex-shrink-0"
+                        aria-hidden="true"
                       >
                         <path
                           d="M60.1045 4.8978C55.5792 2.8214 50.7265 1.2916 45.6527 0.41542C45.5603 0.39851 45.468 0.440769 45.4204 0.525289C44.7963 1.6353 44.105 3.0834 43.6209 4.2216C38.1637 3.4046 32.7345 3.4046 27.3892 4.2216C26.905 3.0581 26.1886 1.6353 25.5617 0.525289C25.5141 0.443589 25.4218 0.40133 25.3294 0.41542C20.2584 1.2888 15.4057 2.8186 10.8776 4.8978C10.8384 4.9147 10.8048 4.9429 10.7825 4.9795C1.57795 18.7309 -0.943561 32.1443 0.293408 45.3914C0.299005 45.4562 0.335386 45.5182 0.385761 45.5576C6.45866 50.0174 12.3413 52.7249 18.1147 54.5195C18.2071 54.5477 18.305 54.5139 18.3638 54.4378C19.7295 52.5728 20.9469 50.6063 21.9907 48.5383C22.0523 48.4172 21.9935 48.2735 21.8676 48.2256C19.9366 47.4931 18.0979 46.6 16.3292 45.5858C16.1893 45.5041 16.1781 45.304 16.3068 45.2082C16.679 44.9293 17.0513 44.6391 17.4067 44.3461C17.471 44.2926 17.5606 44.2813 17.6362 44.3151C29.2558 49.6202 41.8354 49.6202 53.3179 44.3151C53.3935 44.2785 53.4831 44.2898 53.5502 44.3433C53.9057 44.6363 54.2779 44.9293 54.6529 45.2082C54.7816 45.304 54.7732 45.5041 54.6333 45.5858C52.8646 46.6197 51.0259 47.4931 49.0921 48.2228C48.9662 48.2707 48.9102 48.4172 48.9718 48.5383C50.038 50.6034 51.2554 52.5699 52.5959 54.435C52.6519 54.5139 52.7526 54.5477 52.845 54.5195C58.6464 52.7249 64.529 50.0174 70.6019 45.5576C70.6551 45.5182 70.6887 45.459 70.6943 45.3942C72.1747 30.0791 68.2147 16.7757 60.1968 4.9823C60.1772 4.9429 60.1437 4.9147 60.1045 4.8978ZM23.7259 37.3253C20.2276 37.3253 17.3451 34.1136 17.3451 30.1693C17.3451 26.225 20.1717 23.0133 23.7259 23.0133C27.308 23.0133 30.1626 26.2532 30.1066 30.1693C30.1066 34.1136 27.28 37.3253 23.7259 37.3253ZM47.3178 37.3253C43.8196 37.3253 40.9371 34.1136 40.9371 30.1693C40.9371 26.225 43.7636 23.0133 47.3178 23.0133C50.9 23.0133 53.7545 26.2532 53.6986 30.1693C53.6986 34.1136 50.9 37.3253 47.3178 37.3253Z"
@@ -520,23 +577,35 @@ export default function WhitelistPage() {
                   <form
                     onSubmit={handleSubmit}
                     className="space-y-6 sm:space-y-8"
+                    noValidate
                   >
                     <div>
                       <label
                         htmlFor="ign"
                         className="block text-white/90 font-semibold text-base sm:text-lg mb-3"
                       >
-                        🎮 In-Game Name
+                        🎮 In-Game Name <span className="text-red-400">*</span>
                       </label>
                       <input
                         type="text"
                         id="ign"
+                        name="ign"
                         value={ign}
-                        onChange={(e) => setIgn(e.target.value)}
-                        placeholder="Enter your IGN"
+                        onChange={handleIgnChange}
+                        placeholder="Enter your in-game name"
                         required
-                        className="w-full p-4 sm:p-5 rounded-xl border-2 border-white/20 bg-black/40 text-white text-base sm:text-lg backdrop-blur-xl focus:outline-none focus:border-[#ffd700] focus:ring-4 focus:ring-[#ffd700]/20 transition-all duration-300 placeholder-white/50"
+                        minLength={2}
+                        maxLength={50}
+                        autoComplete="username"
+                        aria-describedby="ign-error"
+                        aria-invalid={statusMessage.type === "error" && statusMessage.message.includes("in-game name")}
+                        className="w-full p-4 sm:p-5 rounded-xl border-2 border-white/20 bg-black/40 text-white text-base sm:text-lg backdrop-blur-xl focus:outline-none focus:border-[#ffd700] focus:ring-4 focus:ring-[#ffd700]/20 transition-all duration-300 placeholder-white/50 invalid:border-red-500/50"
                       />
+                      {statusMessage.type === "error" && statusMessage.message.includes("in-game name") && (
+                        <div id="ign-error" className="mt-2 text-red-400 text-sm" role="alert">
+                          {statusMessage.message}
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -552,28 +621,32 @@ export default function WhitelistPage() {
                       <input
                         type="text"
                         id="referral"
+                        name="referral"
                         value={referral}
-                        onChange={(e) => setReferral(e.target.value)}
-                        placeholder="IGN of who referred you?"
+                        onChange={handleReferralChange}
+                        placeholder="IGN of who referred you"
+                        maxLength={50}
+                        autoComplete="off"
                         className="w-full p-4 sm:p-5 rounded-xl border-2 border-white/20 bg-black/40 text-white text-base sm:text-lg backdrop-blur-xl focus:outline-none focus:border-[#ffd700] focus:ring-4 focus:ring-[#ffd700]/20 transition-all duration-300 placeholder-white/50"
                       />
                     </div>
 
                     <button
                       type="submit"
-                      disabled={isSubmitting}
-                      className="group relative w-full py-4 sm:py-6 px-6 sm:px-8 bg-gradient-to-r from-[#ffd700] via-[#ffed4e] to-[#ffd700] text-black font-black text-lg sm:text-xl uppercase tracking-wider rounded-2xl shadow-2xl hover:shadow-[#ffd700]/25 transition-all duration-300 transform hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden"
+                      disabled={isSubmitting || !ign.trim()}
+                      className="group relative w-full py-4 sm:py-6 px-6 sm:px-8 bg-gradient-to-r from-[#ffd700] via-[#ffed4e] to-[#ffd700] text-black font-black text-lg sm:text-xl uppercase tracking-wider rounded-2xl shadow-2xl hover:shadow-[#ffd700]/25 transition-all duration-300 transform hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden focus:outline-none focus:ring-4 focus:ring-[#ffd700]/30"
+                      aria-label={isSubmitting ? "Submitting trial request" : "Submit trial request"}
                     >
                       <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:animate-shimmer"></span>
                       <span className="relative z-10 flex items-center justify-center gap-3 flex-wrap">
                         {isSubmitting ? (
                           <>
-                            <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-t-2 border-b-2 border-black"></div>
+                            <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-t-2 border-b-2 border-black" aria-hidden="true"></div>
                             <span>Activating Trial...</span>
                           </>
                         ) : (
                           <>
-                            <span>🚀</span>
+                            <span aria-hidden="true">🚀</span>
                             <span>Activate Premium Trial</span>
                           </>
                         )}
@@ -591,6 +664,8 @@ export default function WhitelistPage() {
                             ? "bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/40 text-yellow-300"
                             : "bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-blue-500/40 text-blue-300"
                         }`}
+                        role="alert"
+                        aria-live="polite"
                       >
                         <div className="break-words">
                           {statusMessage.message}
@@ -602,7 +677,7 @@ export default function WhitelistPage() {
                   <div className="text-center py-8 sm:py-12">
                     {userStatus?.type === "whitelisted" && (
                       <div className="space-y-4">
-                        <div className="text-5xl sm:text-6xl mb-4">🎉</div>
+                        <div className="text-5xl sm:text-6xl mb-4" aria-hidden="true">🎉</div>
                         <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
                           Welcome to A-List Plus!
                         </h3>
@@ -615,7 +690,7 @@ export default function WhitelistPage() {
 
                     {userStatus?.type === "whitelisted_trial" && (
                       <div className="space-y-4">
-                        <div className="text-5xl sm:text-6xl mb-4">⏳</div>
+                        <div className="text-5xl sm:text-6xl mb-4" aria-hidden="true">⏳</div>
                         <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
                           Trial Active!
                         </h3>
@@ -629,7 +704,7 @@ export default function WhitelistPage() {
 
                     {userStatus?.type === "active_trial" && (
                       <div className="space-y-4">
-                        <div className="text-5xl sm:text-6xl mb-4">⏳</div>
+                        <div className="text-5xl sm:text-6xl mb-4" aria-hidden="true">⏳</div>
                         <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
                           Trial in Progress
                         </h3>
@@ -642,7 +717,7 @@ export default function WhitelistPage() {
 
                     {userStatus?.type === "expired_trial" && (
                       <div className="space-y-4">
-                        <div className="text-5xl sm:text-6xl mb-4">⏰</div>
+                        <div className="text-5xl sm:text-6xl mb-4" aria-hidden="true">⏰</div>
                         <h3 className="text-xl sm:text-2xl font-bold text-red-400 mb-2">
                           Trial Expired
                         </h3>
@@ -829,6 +904,34 @@ export default function WhitelistPage() {
             padding-left: max(1rem, env(safe-area-inset-left));
             padding-right: max(1rem, env(safe-area-inset-right));
           }
+        }
+
+        /* Loading state optimization */
+        .animate-spin {
+          will-change: transform;
+        }
+
+        /* Performance optimizations for animations */
+        .animate-float,
+        .animate-float-delayed,
+        .animate-pulse-soft,
+        .animate-pulse-slow {
+          will-change: transform, opacity;
+        }
+
+        /* Improve text rendering */
+        * {
+          text-rendering: optimizeLegibility;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Optimize GPU acceleration for animations */
+        .animate-fade-in-up,
+        .animate-fade-in-up-delayed {
+          transform: translateZ(0);
+          backface-visibility: hidden;
+          perspective: 1000px;
         }
       `}</style>
     </div>
