@@ -277,73 +277,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Define getSession at component level
-  const getSession = useCallback(async () => {
-    try {
-      setState((prev) => ({ ...prev, loading: true }));
-      setError(null);
+  // const getSession = useCallback(async () => {
+  //   try {
+  //     setState((prev) => ({ ...prev, loading: true }));
+  //     setError(null);
 
-      const {
-        data: { session },
-        error,
-      } = await withTimeout(supabase.auth.getSession());
+  //     const {
+  //       data: { session },
+  //       error,
+  //     } = await withTimeout(supabase.auth.getSession());
 
-      if (error) {
-        throw error;
-      }
+  //     if (error) {
+  //       throw error;
+  //     }
 
-      if (session?.user) {
-        const { hasAccess, isTrialActive } = await checkUserAccess(
-          session.user as AuthUser
-        );
+  //     if (session?.user) {
+  //       const { hasAccess, isTrialActive } = await checkUserAccess(
+  //         session.user as AuthUser
+  //       );
 
-        const newState = {
-          user: session.user as AuthUser,
-          session: session as AuthSession,
-          loading: false,
-          hasAccess,
-          isTrialActive,
-        };
+  //       const newState = {
+  //         user: session.user as AuthUser,
+  //         session: session as AuthSession,
+  //         loading: false,
+  //         hasAccess,
+  //         isTrialActive,
+  //       };
 
-        setState(newState);
-        setLastUpdated(Date.now());
+  //       setState(newState);
+  //       setLastUpdated(Date.now());
 
-        // Cache the auth data
-        localStorage.setItem(
-          AUTH_CACHE_KEY,
-          JSON.stringify({
-            data: newState,
-            timestamp: Date.now(),
-          })
-        );
-      } else {
-        setState((prev) => ({ ...prev, loading: false }));
-      }
-    } catch (error) {
-      console.error("Error in getSession:", error);
-      setState((prev) => ({ ...prev, loading: false }));
-      setError(
-        error instanceof Error ? error : new Error("Failed to get session")
-      );
+  //       // Cache the auth data
+  //       localStorage.setItem(
+  //         AUTH_CACHE_KEY,
+  //         JSON.stringify({
+  //           data: newState,
+  //           timestamp: Date.now(),
+  //         })
+  //       );
+  //     } else {
+  //       setState((prev) => ({ ...prev, loading: false }));
+  //     }
+  //   } catch (error) {
+  //     console.error("Error in getSession:", error);
+  //     setState((prev) => ({ ...prev, loading: false }));
+  //     setError(
+  //       error instanceof Error ? error : new Error("Failed to get session")
+  //     );
 
-      // Retry logic
-      if (retryAttemptsRef.current < 5) {
-        retryAttemptsRef.current++;
-        setTimeout(getSession, RETRY_DELAY * retryAttemptsRef.current);
-      } else {
-        // After max retries, ensure loading is set to false
-        setState((prev) => ({ ...prev, loading: false }));
-        console.error(
-          "Max retry attempts reached in getSession. Stopping further retries and setting loading to false."
-        );
-      }
-    } finally {
-      setState((prev) => ({ ...prev, loading: false }));
-    }
-  }, []);
+  //     // Retry logic
+  //     if (retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
+  //       retryAttemptsRef.current++;
+  //       setTimeout(getSession, RETRY_DELAY * retryAttemptsRef.current);
+  //     } else {
+  //       // After max retries, ensure loading is set to false
+  //       setState((prev) => ({ ...prev, loading: false }));
+  //       console.error(
+  //         "Max retry attempts reached in getSession. Stopping further retries and setting loading to false."
+  //       );
+  //     }
+  //   } finally {
+  //     setState((prev) => ({ ...prev, loading: false }));
+  //   }
+  // }, []);
 
   // Initialize auth state
   useEffect(() => {
-    getSession();
+    // getSession();
 
     // Set up auth state change listener
     const {
