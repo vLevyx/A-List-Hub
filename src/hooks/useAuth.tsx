@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  const [thereIsUnexpiredCache, setThereIsUnexpiredCache] = useState(false);
+  const [hasValidCache, setHasValidCache] = useState(false);
 
   // Refs for tracking retry attempts and intervals
   const retryAttemptsRef = useRef(0);
@@ -100,6 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
 
           setLastUpdated(timestamp);
+          setHasValidCache(true);
 
           // Still refresh in background to ensure data is current
           refreshUserDataInternal(data.session);
@@ -348,7 +349,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
-    getSession();
+    if (!hasValidCache) {
+      getSession();
+    }
 
     // Set up auth state change listener
     const {
@@ -439,7 +442,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearInterval(refreshIntervalRef.current);
       }
     };
-  }, []);
+  }, [hasValidCache]);
 
   // Set up real-time subscription for user access changes
   useEffect(() => {
