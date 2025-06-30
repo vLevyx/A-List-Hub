@@ -7,7 +7,6 @@ import { usePageTracking } from "@/hooks/usePageTracking";
 import { createClient } from "@/lib/supabase/client";
 import { getDiscordId } from "@/lib/utils";
 import { withTimeout } from "@/lib/timeout";
-import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 // Configuration
 const DISCOUNT_ENABLED = false;
@@ -27,17 +26,9 @@ interface UserStatus {
   showCountdown: boolean;
 }
 
-interface UserData {
-  hub_trial: boolean;
-  revoked: boolean;
-  trial_expiration: string | null;
-}
-
 export default function WhitelistPage() {
   usePageTracking();
-  
-  // Use centralized auth state like other pages
-  const { user, loading, hasAccess, isTrialActive, signInWithDiscord } = useAuth();
+  const { user, loading, signInWithDiscord } = useAuth();
   const supabase = createClient();
 
   // Form state
@@ -49,22 +40,34 @@ export default function WhitelistPage() {
     message: string;
   }>({ type: null, message: "" });
 
-  // User status state - simplified
-  const [userData, setUserData] = useState<UserData | null>(null);
+  // User status state
+  const [userData, setUserData] = useState<any>(null);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
-  const [isDataLoading, setIsDataLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Load additional user data only when needed for countdown timer
+  // Load user data
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!user || loading) return;
+      setIsLoading(true);
 
-      setIsDataLoading(true);
+      if (!user) {
+        setUserStatus({
+          type: "not_logged_in",
+          showForm: false,
+          showCountdown: false,
+        });
+        setIsLoading(false);
+        return;
+      }
 
       try {
         const discordId = getDiscordId(user);
         if (!discordId) {
-          setIsDataLoading(false);
+          setStatusMessage({
+            type: "error",
+            message: "Could not determine Discord ID",
+          });
+          setIsLoading(false);
           return;
         }
 
@@ -78,27 +81,27 @@ export default function WhitelistPage() {
 
         if (error && error.code !== "PGRST116") {
           console.error("Error fetching user data:", error);
-          setIsDataLoading(false);
+          setIsLoading(false);
           return;
         }
 
         setUserData(
           data || { hub_trial: false, revoked: true, trial_expiration: null }
         );
+        setIsLoading(false);
       } catch (error) {
         console.error("Failed to fetch user data:", error);
-      } finally {
-        setIsDataLoading(false);
+        setIsLoading(false);
       }
     };
 
-    fetchUserData();
+    if (!loading) {
+      fetchUserData();
+    }
   }, [user, loading, supabase]);
 
-  // Determine user status based on centralized auth state
+  // Determine user status
   useEffect(() => {
-    if (loading) return; // Wait for auth to finish loading
-
     if (!user) {
       setUserStatus({
         type: "not_logged_in",
@@ -108,39 +111,44 @@ export default function WhitelistPage() {
       return;
     }
 
-    // Use the centralized hasAccess and isTrialActive from useAuth
-    if (hasAccess && isTrialActive) {
-      setUserStatus({
-        type: "whitelisted_trial",
-        showForm: false,
-        showCountdown: true,
-      });
-    } else if (hasAccess) {
-      setUserStatus({
-        type: "whitelisted",
-        showForm: false,
-        showCountdown: false,
-      });
-    } else if (userData?.hub_trial && isTrialActive) {
-      setUserStatus({
-        type: "active_trial",
-        showForm: false,
-        showCountdown: true,
-      });
-    } else if (userData?.hub_trial) {
-      setUserStatus({
-        type: "expired_trial",
-        showForm: false,
-        showCountdown: false,
-      });
-    } else {
-      setUserStatus({
-        type: "eligible",
-        showForm: true,
-        showCountdown: false,
-      });
+    if (userData) {
+      const now = new Date();
+      const isTrialActive =
+        userData.trial_expiration && new Date(userData.trial_expiration) > now;
+
+      if (userData.revoked === false && isTrialActive) {
+        setUserStatus({
+          type: "whitelisted_trial",
+          showForm: false,
+          showCountdown: true,
+        });
+      } else if (userData.revoked === false) {
+        setUserStatus({
+          type: "whitelisted",
+          showForm: false,
+          showCountdown: false,
+        });
+      } else if (userData.hub_trial && isTrialActive) {
+        setUserStatus({
+          type: "active_trial",
+          showForm: false,
+          showCountdown: true,
+        });
+      } else if (userData.hub_trial) {
+        setUserStatus({
+          type: "expired_trial",
+          showForm: false,
+          showCountdown: false,
+        });
+      } else {
+        setUserStatus({
+          type: "eligible",
+          showForm: true,
+          showCountdown: false,
+        });
+      }
     }
-  }, [user, loading, hasAccess, isTrialActive, userData]);
+  }, [userData, user]);
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -177,7 +185,8 @@ export default function WhitelistPage() {
       }
 
       // Calculate trial end time (7 days from now in Unix timestamp)
-      const trialEnds = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+      const trialEnds =
+        Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
 
       const { data: sessionData } = await withTimeout(
         supabase.auth.getSession()
@@ -323,8 +332,7 @@ export default function WhitelistPage() {
     );
   };
 
-  // Show loading spinner while auth is loading
-  if (loading) {
+  if ((loading || isLoading) && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0c0c0c] via-[#1a1a2e] to-[#16213e]">
         <div className="relative">
@@ -605,26 +613,8 @@ export default function WhitelistPage() {
                   </div>
                 )}
               </div>
-
-              {/* Bottom CTA */}
-              <div className="text-center mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-white/10">
-                <p className="text-[#ffd700] font-bold text-xl sm:text-2xl mb-4 break-words">
-                  🌟 Ready to Join the Elite? 🌟
-                </p>
-                <p className="text-white/80 text-base sm:text-lg break-words">
-                  Experience the exclusive A-List Plus lifestyle today!
-                </p>
-              </div>
             </div>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-8 sm:mt-12 text-center text-white/60 px-4">
-          <p className="text-xs sm:text-sm break-words">
-            © 2024 A-List Hub. All rights reserved. | 
-            <span className="text-[#ffd700] ml-1">Elite Gaming Experience</span>
-          </p>
         </div>
       </div>
 
