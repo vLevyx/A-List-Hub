@@ -7,6 +7,7 @@ import {
   useState,
   useCallback,
   useRef,
+  useMemo,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getDiscordId, isUserWhitelisted, hasValidTrial } from "@/lib/utils";
@@ -55,8 +56,135 @@ const AUTH_CACHE_TTL = 0 * 60 * 1000; // 5 minutes
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY = 1000; // 1 second
 
+// Enhanced LoadingSpinner component with proper sizing
+export function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
+  const sizeClasses = {
+    sm: "h-4 w-4",
+    md: "h-8 w-8", 
+    lg: "h-16 w-16"
+  };
+
+  return (
+    <div className="relative">
+      <div className={`animate-spin rounded-full border-t-4 border-b-4 border-[#ffd700] ${sizeClasses[size]}`}></div>
+      <div className={`absolute inset-0 animate-ping rounded-full border-2 border-[#ffd700]/30 ${sizeClasses[size]}`}></div>
+    </div>
+  );
+}
+
+// Error boundary component for auth failures
+export function AuthErrorBoundary({ children }: { children: React.ReactNode }) {
+  const [hasError, setHasError] = useState(false);
+
+  // Reset error state when children change
+  useEffect(() => {
+    if (hasError) {
+      setHasError(false);
+    }
+  }, [children]);
+
+  if (hasError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0c0c0c] via-[#1a1a2e] to-[#16213e]">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-white mb-4">Authentication Error</h2>
+          <p className="text-white/70 mb-6">Something went wrong with authentication. Please try refreshing the page.</p>
+          <button
+            onClick={() => {
+              setHasError(false);
+              window.location.reload();
+            }}
+            className="bg-[#ffd700] hover:bg-[#ffc400] text-black px-6 py-3 rounded-xl font-semibold transition-colors"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  try {
+    return <>{children}</>;
+  } catch (error) {
+    console.error("Auth error caught by boundary:", error);
+    setHasError(true);
+    return null;
+  }
+}
+
+// User data interface for type safety
+interface UserData {
+  hub_trial: boolean;
+  revoked: boolean;
+  trial_expiration: string | null;
+}
+
+// Optimized user data fetching hook
+export function useUserData() {
+  const { user, loading } = useAuth();
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [isDataLoading, setIsDataLoading] = useState(false);
+  const supabase = createClient();
+
+  const fetchUserData = useCallback(async () => {
+    if (!user || loading) return;
+
+    setIsDataLoading(true);
+
+    try {
+      const discordId = getDiscordId(user);
+      if (!discordId) return;
+
+      const { data, error } = await withTimeout(
+        supabase
+          .from("users")
+          .select("hub_trial, revoked, trial_expiration")
+          .eq("discord_id", discordId)
+          .single()
+      );
+
+      if (error && error.code !== "PGRST116") {
+        console.error("Error fetching user data:", error);
+        return;
+      }
+
+      setUserData(
+        data || { hub_trial: false, revoked: true, trial_expiration: null }
+      );
+    } catch (error) {
+      console.error("Failed to fetch user data:", error);
+    } finally {
+      setIsDataLoading(false);
+    }
+  }, [user, loading, supabase]);
+
+  useEffect(() => {
+    fetchUserData();
+  }, [fetchUserData]);
+
+  return { userData, isDataLoading, refetch: fetchUserData };
+}
+
+// Page-level authentication wrapper
+export function withAuth<P extends object>(Component: React.ComponentType<P>) {
+  return function AuthenticatedComponent(props: P) {
+    const { user, loading } = useAuth();
+
+    if (loading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0c0c0c] via-[#1a1a2e] to-[#16213e]">
+          <LoadingSpinner size="lg" />
+        </div>
+      );
+    }
+
+    return <Component {...props} />;
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  
   // Enhanced state management
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -77,6 +205,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const initialLoadAttemptedRef = useRef(false);
 
   const supabase = createClient();
+
+  // Memoized supabase client to prevent recreation
+  const memoizedSupabase = useMemo(() => createClient(), []);
 
   // Load cached auth data on initial render
   useEffect(() => {
@@ -110,8 +241,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Check user access with retry mechanism
-  const checkUserAccess = async (
+  // Check user access with retry mechanism - memoized for performance
+  const checkUserAccess = useCallback(async (
     user: AuthUser,
     attempt = 1
   ): Promise<{ hasAccess: boolean; isTrialActive: boolean }> => {
@@ -120,7 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const { data, error } = await withTimeout(
-        supabase
+        memoizedSupabase
           .from("users")
           .select("revoked, hub_trial, trial_expiration")
           .eq("discord_id", discordId)
@@ -151,10 +282,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
       return { hasAccess: false, isTrialActive: false };
     }
-  };
+  }, [memoizedSupabase]);
 
-  // Refresh user data with optimized approach
-  const refreshUserDataInternal = async (
+  // Refresh user data with optimized approach - memoized
+  const refreshUserDataInternal = useCallback(async (
     session: AuthSession | null = null
   ) => {
     if (!session && !state.session?.user) return;
@@ -200,19 +331,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsRefreshing(false);
       setState((prev) => ({ ...prev, loading: false }));
     }
-  };
+  }, [state.session, checkUserAccess]);
 
-  // Public refresh method
-  const refreshUserData = async () => {
+  // Public refresh method - memoized to prevent recreation
+  const refreshUserData = useCallback(async () => {
     await refreshUserDataInternal();
-  };
+  }, [refreshUserDataInternal]);
 
-  // Sign in with Discord
-  const signInWithDiscord = async () => {
+  // Sign in with Discord - memoized
+  const signInWithDiscord = useCallback(async () => {
     try {
       setError(null);
       const { error } = await withTimeout(
-        supabase.auth.signInWithOAuth({
+        memoizedSupabase.auth.signInWithOAuth({
           provider: "discord",
           options: {
             redirectTo: `${window.location.origin}/auth/callback`,
@@ -228,13 +359,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           : new Error("Failed to sign in with Discord")
       );
     }
-  };
+  }, [memoizedSupabase]);
 
-  // Sign out with cleanup
-  const signOut = async () => {
+  // Sign out with cleanup - memoized
+  const signOut = useCallback(async () => {
     try {
       setError(null);
-      const { error } = await withTimeout(supabase.auth.signOut());
+      const { error } = await withTimeout(memoizedSupabase.auth.signOut());
       if (error) throw error;
 
       // Clear auth cache
@@ -274,9 +405,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setState((prev) => ({ ...prev, loading: false }));
     }
-  };
+  }, [memoizedSupabase, router]);
 
-  // Define getSession at component level
+  // Define getSession at component level - memoized
   const getSession = useCallback(async () => {
     console.log("called");
     try {
@@ -286,7 +417,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const {
         data: { session },
         error,
-      } = await withTimeout(supabase.auth.getSession());
+      } = await withTimeout(memoizedSupabase.auth.getSession());
 
       if (error) {
         throw error;
@@ -340,7 +471,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setState((prev) => ({ ...prev, loading: false }));
     }
-  }, []);
+  }, [memoizedSupabase, checkUserAccess]);
 
   // Initialize auth state
   useEffect(() => {
@@ -349,7 +480,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Set up auth state change listener
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = memoizedSupabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "INITIAL_SESSION" && session?.user) {
         // Only track login if we're on the OAuth callback URL with success parameter
         const isSuccessfulAuth =
@@ -360,7 +491,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const username = session.user.user_metadata?.full_name;
 
           if (discordId) {
-            await supabase.rpc("upsert_user_login", {
+            await memoizedSupabase.rpc("upsert_user_login", {
               target_discord_id: discordId,
               user_name: username,
             });
@@ -434,7 +565,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearInterval(refreshIntervalRef.current);
       }
     };
-  }, []);
+  }, [getSession, memoizedSupabase, router, checkUserAccess, state.session, state.hasAccess, state.isTrialActive]);
 
   // Set up real-time subscription for user access changes
   useEffect(() => {
@@ -443,7 +574,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const discordId = getDiscordId(state.user);
     if (!discordId) return;
 
-    const channel = supabase
+    const channel = memoizedSupabase
       .channel("user-access-changes")
       .on(
         "postgres_changes",
@@ -460,30 +591,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      memoizedSupabase.removeChannel(channel);
     };
-  }, [state.user]);
+  }, [state.user, memoizedSupabase, refreshUserDataInternal]);
 
-  //Ensures user loading is false whenever there is a user
+  // Ensures user loading is false whenever there is a user
   useEffect(() => {
     if (state.user && state.loading) {
       setState((prev) => ({ ...prev, loading: false }));
     }
   }, [state.user, state.loading]);
 
+  // Memoize auth context value to prevent unnecessary provider re-renders
+  const authContextValue = useMemo(() => ({
+    user: state.user,
+    session: state.session,
+    loading: state.loading,
+    hasAccess: state.hasAccess,
+    isTrialActive: state.isTrialActive,
+    signInWithDiscord,
+    signOut,
+    refreshUserData,
+    isLoading: state.loading,
+    isRefreshing,
+    lastUpdated,
+    error,
+  }), [
+    state.user,
+    state.session,
+    state.loading,
+    state.hasAccess,
+    state.isTrialActive,
+    signInWithDiscord,
+    signOut,
+    refreshUserData,
+    isRefreshing,
+    lastUpdated,
+    error,
+  ]);
+
   return (
-    <AuthContext.Provider
-      value={{
-        ...state,
-        signInWithDiscord,
-        signOut,
-        refreshUserData,
-        isLoading: state.loading,
-        isRefreshing,
-        lastUpdated,
-        error,
-      }}
-    >
+    <AuthContext.Provider value={authContextValue}>
       {children}
     </AuthContext.Provider>
   );

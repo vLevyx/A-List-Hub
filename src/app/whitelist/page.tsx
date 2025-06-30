@@ -2,17 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTracking } from "@/hooks/usePageTracking";
+import { createClient } from "@/lib/supabase/client";
 import { getDiscordId } from "@/lib/utils";
+import { withTimeout } from "@/lib/timeout";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 // Configuration
 const DISCOUNT_ENABLED = false;
 const ORIGINAL_PRICE = 2500000;
 const DISCOUNT_RATE = 0.15;
 const DISCOUNTED_PRICE = ORIGINAL_PRICE * (1 - DISCOUNT_RATE);
-const TRIAL_DAYS = 7;
 
 interface UserStatus {
   type:
@@ -26,11 +27,18 @@ interface UserStatus {
   showCountdown: boolean;
 }
 
+interface UserData {
+  hub_trial: boolean;
+  revoked: boolean;
+  trial_expiration: string | null;
+}
+
 export default function WhitelistPage() {
   usePageTracking();
   
-  // Only use basic auth data - avoid hasAccess/isTrialActive which may cause mobile delays
-  const { user, loading: authLoading, signInWithDiscord, session } = useAuth();
+  // Use centralized auth state like other pages
+  const { user, loading, hasAccess, isTrialActive, signInWithDiscord } = useAuth();
+  const supabase = createClient();
 
   // Form state
   const [ign, setIgn] = useState("");
@@ -41,15 +49,55 @@ export default function WhitelistPage() {
     message: string;
   }>({ type: null, message: "" });
 
-  // Simplified user status - default to eligible for all logged-in users
+  // User status state - simplified
+  const [userData, setUserData] = useState<UserData | null>(null);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
+  const [isDataLoading, setIsDataLoading] = useState(false);
 
-  // Extremely simplified status logic to avoid mobile delays
+  // Load additional user data only when needed for countdown timer
   useEffect(() => {
-    if (authLoading) {
-      // Don't set anything while loading
-      return;
-    }
+    const fetchUserData = async () => {
+      if (!user || loading) return;
+
+      setIsDataLoading(true);
+
+      try {
+        const discordId = getDiscordId(user);
+        if (!discordId) {
+          setIsDataLoading(false);
+          return;
+        }
+
+        const { data, error } = await withTimeout(
+          supabase
+            .from("users")
+            .select("hub_trial, revoked, trial_expiration")
+            .eq("discord_id", discordId)
+            .single()
+        );
+
+        if (error && error.code !== "PGRST116") {
+          console.error("Error fetching user data:", error);
+          setIsDataLoading(false);
+          return;
+        }
+
+        setUserData(
+          data || { hub_trial: false, revoked: true, trial_expiration: null }
+        );
+      } catch (error) {
+        console.error("Failed to fetch user data:", error);
+      } finally {
+        setIsDataLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, [user, loading, supabase]);
+
+  // Determine user status based on centralized auth state
+  useEffect(() => {
+    if (loading) return; // Wait for auth to finish loading
 
     if (!user) {
       setUserStatus({
@@ -57,16 +105,42 @@ export default function WhitelistPage() {
         showForm: false,
         showCountdown: false,
       });
+      return;
+    }
+
+    // Use the centralized hasAccess and isTrialActive from useAuth
+    if (hasAccess && isTrialActive) {
+      setUserStatus({
+        type: "whitelisted_trial",
+        showForm: false,
+        showCountdown: true,
+      });
+    } else if (hasAccess) {
+      setUserStatus({
+        type: "whitelisted",
+        showForm: false,
+        showCountdown: false,
+      });
+    } else if (userData?.hub_trial && isTrialActive) {
+      setUserStatus({
+        type: "active_trial",
+        showForm: false,
+        showCountdown: true,
+      });
+    } else if (userData?.hub_trial) {
+      setUserStatus({
+        type: "expired_trial",
+        showForm: false,
+        showCountdown: false,
+      });
     } else {
-      // For all logged-in users, just show the form
-      // We'll let the backend handle checking their actual status
       setUserStatus({
         type: "eligible",
         showForm: true,
         showCountdown: false,
       });
     }
-  }, [user, authLoading]);
+  }, [user, loading, hasAccess, isTrialActive, userData]);
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,7 +154,7 @@ export default function WhitelistPage() {
       return;
     }
 
-    if (!user || !session) {
+    if (!user) {
       setStatusMessage({
         type: "error",
         message: "❌ You must be logged in to request a trial.",
@@ -105,18 +179,13 @@ export default function WhitelistPage() {
       // Calculate trial end time (7 days from now in Unix timestamp)
       const trialEnds = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
 
-      // Use session token from auth context
-      const token = session.access_token;
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession()
+      );
+      const token = sessionData.session?.access_token;
 
-      if (!token) {
-        throw new Error("Authentication token not available");
-      }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // Longer timeout for mobile
-
-      try {
-        const response = await fetch(
+      const response = await withTimeout(
+        fetch(
           "https://dsexkdjxmhgqahrlkvax.functions.supabase.co/sendDiscordWebhook",
           {
             method: "POST",
@@ -131,35 +200,26 @@ export default function WhitelistPage() {
               referral: referral.trim() || "None",
               trialEnds,
             }),
-            signal: controller.signal,
           }
-        );
+        )
+      );
 
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || "Failed to activate trial");
-        }
-
-        setStatusMessage({
-          type: "success",
-          message: "✅ Trial activated! You now have 7 days of premium access.",
-        });
-        setIgn("");
-        setReferral("");
-
-        // Reload the page after success
-        setTimeout(() => {
-          window.location.reload();
-        }, 2000);
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId);
-        if (fetchError.name === 'AbortError') {
-          throw new Error("Request timed out. Please try again.");
-        }
-        throw fetchError;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to activate trial");
       }
+
+      setStatusMessage({
+        type: "success",
+        message: "✅ Trial activated! You now have 72 hours of premium access.",
+      });
+      setIgn("");
+      setReferral("");
+
+      // Reload the page after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
     } catch (error) {
       console.error("Error submitting whitelist request:", error);
       setStatusMessage({
@@ -174,7 +234,50 @@ export default function WhitelistPage() {
     }
   };
 
-  // Status message component
+  // Countdown timer component
+  const CountdownTimer = ({ expirationTime }: { expirationTime: string }) => {
+    const [timeLeft, setTimeLeft] = useState<string>("");
+
+    useEffect(() => {
+      const expiration = new Date(expirationTime);
+
+      const updateCountdown = () => {
+        const now = new Date();
+        const diff = expiration.getTime() - now.getTime();
+
+        if (diff <= 0) {
+          setTimeLeft("⏰ Your trial has expired.");
+          return;
+        }
+
+        const totalSeconds = Math.floor(diff / 1000);
+        const days = Math.floor(totalSeconds / 86400);
+        const hours = Math.floor((totalSeconds % 86400) / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        let display = "⏳ Trial ends in: ";
+        if (days > 0) display += `${days}d `;
+        if (hours > 0 || days > 0) display += `${hours}h `;
+        display += `${minutes}m ${seconds}s`;
+
+        setTimeLeft(display);
+      };
+
+      updateCountdown();
+      const timer = setInterval(updateCountdown, 1000);
+
+      return () => clearInterval(timer);
+    }, [expirationTime]);
+
+    return (
+      <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 backdrop-blur-sm text-blue-300 p-4 sm:p-6 rounded-2xl text-center my-6 animate-pulse-soft">
+        <div className="text-xl sm:text-2xl font-bold mb-2 break-words">{timeLeft}</div>
+      </div>
+    );
+  };
+
+  // Status message based on user status
   const StatusMessage = ({ status }: { status: UserStatus }) => {
     const messages = {
       whitelisted_trial: {
@@ -220,8 +323,8 @@ export default function WhitelistPage() {
     );
   };
 
-  // Minimal loading screen - show content ASAP
-  if (authLoading) {
+  // Show loading spinner while auth is loading
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0c0c0c] via-[#1a1a2e] to-[#16213e]">
         <div className="relative">
@@ -234,10 +337,11 @@ export default function WhitelistPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0c0c0c] via-[#1a1a2e] to-[#16213e] bg-fixed relative overflow-hidden">
-      {/* Simplified background for mobile performance */}
+      {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-20 w-96 h-96 bg-[#ffd700]/5 rounded-full blur-3xl animate-float"></div>
         <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl animate-float-delayed"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-purple-500/3 rounded-full blur-3xl animate-pulse-slow"></div>
       </div>
 
       <div className="container max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen flex flex-col justify-center items-center relative z-10">
@@ -349,10 +453,13 @@ export default function WhitelistPage() {
                   <p className="text-white/80 text-base sm:text-lg break-words">Ready to join the elite? Let's get started!</p>
                 </div>
 
-                {/* Show status message if needed */}
                 {userStatus && (
                   <div className="mb-6 sm:mb-8">
                     <StatusMessage status={userStatus} />
+
+                    {userStatus.showCountdown && userData?.trial_expiration && (
+                      <CountdownTimer expirationTime={userData.trial_expiration} />
+                    )}
                   </div>
                 )}
 
@@ -378,7 +485,7 @@ export default function WhitelistPage() {
                       <span className="break-words">Connect with Discord</span>
                     </button>
                   </div>
-                ) : (
+                ) : userStatus?.showForm ? (
                   <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
                     <div>
                       <label htmlFor="ign" className="block text-white/90 font-semibold text-base sm:text-lg mb-3">
@@ -446,6 +553,56 @@ export default function WhitelistPage() {
                       </div>
                     )}
                   </form>
+                ) : (
+                  <div className="text-center py-8 sm:py-12">
+                    {userStatus?.type === "whitelisted" && (
+                      <div className="space-y-4">
+                        <div className="text-5xl sm:text-6xl mb-4">🎉</div>
+                        <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
+                          Welcome to A-List Plus!
+                        </h3>
+                        <p className="text-white/90 text-base sm:text-lg break-words">
+                          You already have full access to all premium features. Enjoy your exclusive experience!
+                        </p>
+                      </div>
+                    )}
+
+                    {userStatus?.type === "whitelisted_trial" && (
+                      <div className="space-y-4">
+                        <div className="text-5xl sm:text-6xl mb-4">⏳</div>
+                        <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
+                          Trial Active!
+                        </h3>
+                        <p className="text-white/90 text-base sm:text-lg break-words">
+                          You have full access during your trial period. A staff member will contact you soon to complete your purchase.
+                        </p>
+                      </div>
+                    )}
+
+                    {userStatus?.type === "active_trial" && (
+                      <div className="space-y-4">
+                        <div className="text-5xl sm:text-6xl mb-4">⏳</div>
+                        <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
+                          Trial in Progress
+                        </h3>
+                        <p className="text-white/90 text-base sm:text-lg break-words">
+                          Your trial is currently active. A staff member will contact you soon to complete your purchase.
+                        </p>
+                      </div>
+                    )}
+
+                    {userStatus?.type === "expired_trial" && (
+                      <div className="space-y-4">
+                        <div className="text-5xl sm:text-6xl mb-4">⏰</div>
+                        <h3 className="text-xl sm:text-2xl font-bold text-red-400 mb-2">
+                          Trial Expired
+                        </h3>
+                        <p className="text-white/90 text-base sm:text-lg break-words">
+                          Your trial has expired. Please contact a staff member to complete your purchase and regain access.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -527,6 +684,15 @@ export default function WhitelistPage() {
           }
         }
 
+        @keyframes pulse-slow {
+          0%, 100% {
+            opacity: 0.3;
+          }
+          50% {
+            opacity: 0.1;
+          }
+        }
+
         .animate-shimmer {
           animation: shimmer 2s infinite;
         }
@@ -552,7 +718,11 @@ export default function WhitelistPage() {
           animation: pulse-soft 3s ease-in-out infinite;
         }
 
-        /* Mobile-specific optimizations */
+        .animate-pulse-slow {
+          animation: pulse-slow 4s ease-in-out infinite;
+        }
+
+        /* Enhanced Mobile optimizations */
         @media (max-width: 640px) {
           .container {
             padding-left: 1rem;
@@ -563,21 +733,6 @@ export default function WhitelistPage() {
           * {
             word-wrap: break-word;
             overflow-wrap: break-word;
-          }
-          
-          /* Reduce animations on mobile for better performance */
-          .animate-float,
-          .animate-float-delayed {
-            animation-duration: 10s;
-          }
-          
-          /* Simplify backdrop blur on mobile */
-          .backdrop-blur-xl {
-            backdrop-filter: blur(6px);
-          }
-          
-          .backdrop-blur-2xl {
-            backdrop-filter: blur(8px);
           }
         }
 
@@ -633,20 +788,6 @@ export default function WhitelistPage() {
           .container {
             padding-left: max(1rem, env(safe-area-inset-left));
             padding-right: max(1rem, env(safe-area-inset-right));
-          }
-        }
-
-        /* Performance optimizations for mobile */
-        @media (max-width: 768px) {
-          /* Use transform3d to enable hardware acceleration */
-          .animate-float,
-          .animate-float-delayed {
-            transform: translate3d(0, 0, 0);
-          }
-          
-          /* Reduce complexity of gradients on mobile */
-          .bg-gradient-to-br {
-            background: #0c0c0c;
           }
         }
       `}</style>
