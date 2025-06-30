@@ -98,7 +98,7 @@ export default function WhitelistPage() {
 
   // Load user data
   useEffect(() => {
-    if (!loading && user) {
+    if (user) {
       fetchUserData();
     }
   }, [user, loading, supabase]);
@@ -190,9 +190,7 @@ export default function WhitelistPage() {
       // Calculate trial end time (7 days from now in Unix timestamp)
       const trialEnds = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
 
-      const { data: sessionData } = await withTimeout(
-        supabase.auth.getSession()
-      );
+      const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
 
       const response = await withTimeout(
