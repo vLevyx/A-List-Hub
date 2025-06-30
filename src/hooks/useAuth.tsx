@@ -278,7 +278,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Define getSession at component level
   const getSession = useCallback(async () => {
-    console.log("called");
     try {
       setState((prev) => ({ ...prev, loading: true }));
       setError(null);

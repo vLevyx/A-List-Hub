@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTracking } from "@/hooks/usePageTracking";
@@ -27,9 +27,10 @@ interface UserStatus {
 }
 
 export default function WhitelistPage() {
-  usePageTracking();
   const { user, loading, signInWithDiscord } = useAuth();
   const supabase = createClient();
+
+  usePageTracking();
 
   // Form state
   const [ign, setIgn] = useState("");
@@ -45,57 +46,59 @@ export default function WhitelistPage() {
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Load user data
-  useEffect(() => {
-    const fetchUserData = async () => {
-      setIsLoading(true);
+  const fetchUserData = async () => {
+    setIsLoading(true);
 
-      if (!user) {
-        setUserStatus({
-          type: "not_logged_in",
-          showForm: false,
-          showCountdown: false,
+    if (!user) {
+      setUserStatus({
+        type: "not_logged_in",
+        showForm: false,
+        showCountdown: false,
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const discordId = getDiscordId(user);
+      if (!discordId) {
+        setStatusMessage({
+          type: "error",
+          message: "Could not determine Discord ID",
         });
         setIsLoading(false);
         return;
       }
 
-      try {
-        const discordId = getDiscordId(user);
-        if (!discordId) {
-          setStatusMessage({
-            type: "error",
-            message: "Could not determine Discord ID",
-          });
-          setIsLoading(false);
-          return;
-        }
+      const { data, error } = await withTimeout(
+        supabase
+          .from("users")
+          .select("hub_trial, revoked, trial_expiration")
+          .eq("discord_id", discordId)
+          .single()
+      );
 
-        const { data, error } = await withTimeout(
-          supabase
-            .from("users")
-            .select("hub_trial, revoked, trial_expiration")
-            .eq("discord_id", discordId)
-            .single()
-        );
-
-        if (error && error.code !== "PGRST116") {
-          console.error("Error fetching user data:", error);
-          setIsLoading(false);
-          return;
-        }
-
-        setUserData(
-          data || { hub_trial: false, revoked: true, trial_expiration: null }
-        );
+      if (error && error.code !== "PGRST116") {
+        console.error("Error fetching user data:", error);
         setIsLoading(false);
-      } catch (error) {
-        console.error("Failed to fetch user data:", error);
-        setIsLoading(false);
+        return;
       }
-    };
 
-    if (!loading) {
+      setUserData(
+        data || { hub_trial: false, revoked: true, trial_expiration: null }
+      );
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Failed to fetch user data:", error);
+      setIsLoading(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load user data
+  useEffect(() => {
+    if (!loading && user) {
       fetchUserData();
     }
   }, [user, loading, supabase]);
@@ -151,7 +154,7 @@ export default function WhitelistPage() {
   }, [userData, user]);
 
   // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!ign.trim()) {
@@ -185,8 +188,7 @@ export default function WhitelistPage() {
       }
 
       // Calculate trial end time (7 days from now in Unix timestamp)
-      const trialEnds =
-        Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+      const trialEnds = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
 
       const { data: sessionData } = await withTimeout(
         supabase.auth.getSession()
@@ -241,7 +243,7 @@ export default function WhitelistPage() {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, []);
 
   // Countdown timer component
   const CountdownTimer = ({ expirationTime }: { expirationTime: string }) => {
@@ -281,7 +283,9 @@ export default function WhitelistPage() {
 
     return (
       <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 backdrop-blur-sm text-blue-300 p-4 sm:p-6 rounded-2xl text-center my-6 animate-pulse-soft">
-        <div className="text-xl sm:text-2xl font-bold mb-2 break-words">{timeLeft}</div>
+        <div className="text-xl sm:text-2xl font-bold mb-2 break-words">
+          {timeLeft}
+        </div>
       </div>
     );
   };
@@ -327,7 +331,9 @@ export default function WhitelistPage() {
             : "bg-gradient-to-r from-red-500/20 to-pink-500/20 border-red-500/40 text-red-300"
         }`}
       >
-        <div className="text-base sm:text-lg font-semibold break-words">{message}</div>
+        <div className="text-base sm:text-lg font-semibold break-words">
+          {message}
+        </div>
       </div>
     );
   };
@@ -376,7 +382,8 @@ export default function WhitelistPage() {
             Exclusive Premium Access
           </h2>
           <p className="text-white/70 text-base sm:text-lg md:text-xl max-w-2xl mx-auto leading-relaxed px-4">
-            Join the elite community with premium features and exclusive benefits
+            Join the elite community with premium features and exclusive
+            benefits
           </p>
         </div>
 
@@ -385,7 +392,6 @@ export default function WhitelistPage() {
           {/* Gradient border effect */}
           <div className="relative p-1 bg-gradient-to-r from-[#ffd700] via-purple-500 to-blue-500 rounded-3xl">
             <div className="bg-black/80 backdrop-blur-xl rounded-[22px] p-4 sm:p-6 md:p-8 lg:p-12">
-              
               {/* Benefits Section - Mobile Optimized */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 mb-8 sm:mb-12">
                 <div className="space-y-6">
@@ -393,14 +399,17 @@ export default function WhitelistPage() {
                     <span className="text-2xl sm:text-3xl">⚡</span>
                     What You Get
                   </h3>
-                  
+
                   <div className="space-y-4 sm:space-y-6">
                     {[
                       "Complete the form below to start your premium trial experience",
                       "Once form is submitted, one of the A-List Hub staff members will be in touch with you via Discord DMs",
-                      "This is a one-time purchase that unlocks all features and allows access to all future updates"
+                      "This is a one-time purchase that unlocks all features and allows access to all future updates",
                     ].map((benefit, index) => (
-                      <div key={index} className="flex items-start gap-3 sm:gap-4 group">
+                      <div
+                        key={index}
+                        className="flex items-start gap-3 sm:gap-4 group"
+                      >
                         <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-r from-[#ffd700] to-[#ffc400] rounded-full flex items-center justify-center text-black font-bold text-sm group-hover:scale-110 transition-transform">
                           {index + 1}
                         </div>
@@ -421,7 +430,13 @@ export default function WhitelistPage() {
                         💎 Premium Price
                       </h4>
                       <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-white mb-2">
-                        <div className={`break-words ${DISCOUNT_ENABLED ? "line-through opacity-60 text-xl sm:text-2xl" : ""}`}>
+                        <div
+                          className={`break-words ${
+                            DISCOUNT_ENABLED
+                              ? "line-through opacity-60 text-xl sm:text-2xl"
+                              : ""
+                          }`}
+                        >
                           ELAN${ORIGINAL_PRICE.toLocaleString()}
                         </div>
                         {DISCOUNT_ENABLED && (
@@ -445,7 +460,9 @@ export default function WhitelistPage() {
                       <span>FREE Trial Included</span>
                     </h4>
                     <p className="text-white/90 text-sm sm:text-base leading-relaxed break-words">
-                      Upon form submission, you will be granted a <strong className="text-blue-300">7-day trial</strong> to enjoy the features while we process your request.
+                      Upon form submission, you will be granted a{" "}
+                      <strong className="text-blue-300">7-day trial</strong> to
+                      enjoy the features while we process your request.
                     </p>
                   </div>
                 </div>
@@ -455,10 +472,14 @@ export default function WhitelistPage() {
               <div className="bg-gradient-to-br from-white/5 to-white/10 border border-white/20 rounded-2xl p-4 sm:p-6 lg:p-8 backdrop-blur-sm">
                 <div className="text-center mb-6 sm:mb-8">
                   <h3 className="text-2xl sm:text-3xl font-bold text-[#ffd700] mb-2 flex items-center justify-center gap-3 flex-wrap">
-                    <span className="text-3xl sm:text-4xl animate-bounce">🚀</span>
+                    <span className="text-3xl sm:text-4xl animate-bounce">
+                      🚀
+                    </span>
                     <span>Start Your Journey</span>
                   </h3>
-                  <p className="text-white/80 text-base sm:text-lg break-words">Ready to join the elite? Let's get started!</p>
+                  <p className="text-white/80 text-base sm:text-lg break-words">
+                    Ready to join the elite? Let's get started!
+                  </p>
                 </div>
 
                 {userStatus && (
@@ -466,7 +487,9 @@ export default function WhitelistPage() {
                     <StatusMessage status={userStatus} />
 
                     {userStatus.showCountdown && userData?.trial_expiration && (
-                      <CountdownTimer expirationTime={userData.trial_expiration} />
+                      <CountdownTimer
+                        expirationTime={userData.trial_expiration}
+                      />
                     )}
                   </div>
                 )}
@@ -494,9 +517,15 @@ export default function WhitelistPage() {
                     </button>
                   </div>
                 ) : userStatus?.showForm ? (
-                  <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
+                  <form
+                    onSubmit={handleSubmit}
+                    className="space-y-6 sm:space-y-8"
+                  >
                     <div>
-                      <label htmlFor="ign" className="block text-white/90 font-semibold text-base sm:text-lg mb-3">
+                      <label
+                        htmlFor="ign"
+                        className="block text-white/90 font-semibold text-base sm:text-lg mb-3"
+                      >
                         🎮 In-Game Name
                       </label>
                       <input
@@ -511,8 +540,14 @@ export default function WhitelistPage() {
                     </div>
 
                     <div>
-                      <label htmlFor="referral" className="block text-white/90 font-semibold text-base sm:text-lg mb-3">
-                        👥 Referred By <span className="text-white/60 font-normal">(Optional)</span>
+                      <label
+                        htmlFor="referral"
+                        className="block text-white/90 font-semibold text-base sm:text-lg mb-3"
+                      >
+                        👥 Referred By{" "}
+                        <span className="text-white/60 font-normal">
+                          (Optional)
+                        </span>
                       </label>
                       <input
                         type="text"
@@ -557,7 +592,9 @@ export default function WhitelistPage() {
                             : "bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-blue-500/40 text-blue-300"
                         }`}
                       >
-                        <div className="break-words">{statusMessage.message}</div>
+                        <div className="break-words">
+                          {statusMessage.message}
+                        </div>
                       </div>
                     )}
                   </form>
@@ -570,7 +607,8 @@ export default function WhitelistPage() {
                           Welcome to A-List Plus!
                         </h3>
                         <p className="text-white/90 text-base sm:text-lg break-words">
-                          You already have full access to all premium features. Enjoy your exclusive experience!
+                          You already have full access to all premium features.
+                          Enjoy your exclusive experience!
                         </p>
                       </div>
                     )}
@@ -582,7 +620,9 @@ export default function WhitelistPage() {
                           Trial Active!
                         </h3>
                         <p className="text-white/90 text-base sm:text-lg break-words">
-                          You have full access during your trial period. A staff member will contact you soon to complete your purchase.
+                          You have full access during your trial period. A staff
+                          member will contact you soon to complete your
+                          purchase.
                         </p>
                       </div>
                     )}
@@ -594,7 +634,8 @@ export default function WhitelistPage() {
                           Trial in Progress
                         </h3>
                         <p className="text-white/90 text-base sm:text-lg break-words">
-                          Your trial is currently active. A staff member will contact you soon to complete your purchase.
+                          Your trial is currently active. A staff member will
+                          contact you soon to complete your purchase.
                         </p>
                       </div>
                     )}
@@ -606,7 +647,8 @@ export default function WhitelistPage() {
                           Trial Expired
                         </h3>
                         <p className="text-white/90 text-base sm:text-lg break-words">
-                          Your trial has expired. Please contact a staff member to complete your purchase and regain access.
+                          Your trial has expired. Please contact a staff member
+                          to complete your purchase and regain access.
                         </p>
                       </div>
                     )}
@@ -626,7 +668,8 @@ export default function WhitelistPage() {
         }
 
         @keyframes float {
-          0%, 100% {
+          0%,
+          100% {
             transform: translateY(0px);
           }
           50% {
@@ -635,7 +678,8 @@ export default function WhitelistPage() {
         }
 
         @keyframes float-delayed {
-          0%, 100% {
+          0%,
+          100% {
             transform: translateY(0px);
           }
           50% {
@@ -666,7 +710,8 @@ export default function WhitelistPage() {
         }
 
         @keyframes pulse-soft {
-          0%, 100% {
+          0%,
+          100% {
             opacity: 1;
           }
           50% {
@@ -675,7 +720,8 @@ export default function WhitelistPage() {
         }
 
         @keyframes pulse-slow {
-          0%, 100% {
+          0%,
+          100% {
             opacity: 0.3;
           }
           50% {
@@ -718,7 +764,7 @@ export default function WhitelistPage() {
             padding-left: 1rem;
             padding-right: 1rem;
           }
-          
+
           /* Ensure text doesn't overflow on very small screens */
           * {
             word-wrap: break-word;
@@ -739,7 +785,7 @@ export default function WhitelistPage() {
           .bg-black\/40 {
             background-color: rgba(0, 0, 0, 0.8);
           }
-          
+
           .border-white\/20 {
             border-color: rgba(255, 255, 255, 0.4);
           }
@@ -763,12 +809,16 @@ export default function WhitelistPage() {
 
         /* Touch target optimizations for mobile */
         @media (max-width: 768px) {
-          button, input, select {
+          button,
+          input,
+          select {
             min-height: 44px;
           }
-          
+
           /* Prevent iOS zoom on form focus */
-          input, textarea, select {
+          input,
+          textarea,
+          select {
             font-size: 16px;
           }
         }
