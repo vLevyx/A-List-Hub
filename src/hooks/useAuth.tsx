@@ -51,7 +51,7 @@ export const useAuth = () => {
 
 // Configuration constants
 const AUTH_CACHE_KEY = "auth_cache";
-const AUTH_CACHE_TTL = 0 * 60 * 1000; // 5 minutes
+const AUTH_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY = 1000; // 1 second
 
@@ -70,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [thereIsUnexpiredCache, setThereIsUnexpiredCache] = useState(false);
 
   // Refs for tracking retry attempts and intervals
   const retryAttemptsRef = useRef(0);
@@ -82,9 +83,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const cached = localStorage.getItem(AUTH_CACHE_KEY);
+
       if (cached) {
         const { data, timestamp } = JSON.parse(cached);
-        console.log(data);
+
         const isExpired = Date.now() - timestamp > AUTH_CACHE_TTL;
 
         if (!isExpired && data.user) {
@@ -96,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             hasAccess: data.hasAccess,
             isTrialActive: data.isTrialActive,
           });
+
           setLastUpdated(timestamp);
 
           // Still refresh in background to ensure data is current
@@ -278,6 +281,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Define getSession at component level
   const getSession = useCallback(async () => {
+    console.log("called get session");
+
     try {
       setState((prev) => ({ ...prev, loading: true }));
       setError(null);
@@ -326,16 +331,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
 
       // Retry logic
-      // if (retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
-      //   retryAttemptsRef.current++;
-      //   setTimeout(getSession, RETRY_DELAY * retryAttemptsRef.current);
-      // } else {
-      //   // After max retries, ensure loading is set to false
-      //   setState((prev) => ({ ...prev, loading: false }));
-      //   console.error(
-      //     "Max retry attempts reached in getSession. Stopping further retries and setting loading to false."
-      //   );
-      // }
+      if (retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
+        retryAttemptsRef.current++;
+        setTimeout(getSession, RETRY_DELAY * retryAttemptsRef.current);
+      } else {
+        // After max retries, ensure loading is set to false
+        setState((prev) => ({ ...prev, loading: false }));
+        console.error(
+          "Max retry attempts reached in getSession. Stopping further retries and setting loading to false."
+        );
+      }
     } finally {
       setState((prev) => ({ ...prev, loading: false }));
     }
@@ -350,6 +355,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "INITIAL_SESSION" && session?.user) {
+        console.log("called auth state changed");
         // Only track login if we're on the OAuth callback URL with success parameter
         const isSuccessfulAuth =
           window.location.search.includes("?auth=success");

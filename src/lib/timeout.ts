@@ -1,6 +1,6 @@
 export async function withTimeout<T>(
   promiseOrBuilder: Promise<T> | PromiseLike<T>,
-  ms = 20000,
+  ms = 10000,
   errorMessage = "Request timed out"
 ): Promise<T> {
   // Convert to a proper Promise
