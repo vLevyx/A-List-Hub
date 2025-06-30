@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTracking } from "@/hooks/usePageTracking";
-import { createClient } from "@/lib/supabase/client";
 import { getDiscordId } from "@/lib/utils";
 
 // Configuration
@@ -14,10 +13,6 @@ const ORIGINAL_PRICE = 2500000;
 const DISCOUNT_RATE = 0.15;
 const DISCOUNTED_PRICE = ORIGINAL_PRICE * (1 - DISCOUNT_RATE);
 const TRIAL_DAYS = 7;
-
-// Mobile-optimized timeout settings
-const MOBILE_TIMEOUT = 3000; // 3 seconds for mobile
-const DESKTOP_TIMEOUT = 5000; // 5 seconds for desktop
 
 interface UserStatus {
   type:
@@ -31,17 +26,11 @@ interface UserStatus {
   showCountdown: boolean;
 }
 
-// Detect if device is mobile
-const isMobile = () => {
-  if (typeof window === 'undefined') return false;
-  return window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-};
-
 export default function WhitelistPage() {
   usePageTracking();
   
-  // Only use what we need from useAuth - no auth state manipulation
-  const { user, loading: authLoading, signInWithDiscord, session } = useAuth();
+  // Use existing auth state - no additional Supabase client creation
+  const { user, loading: authLoading, signInWithDiscord, session, hasAccess, isTrialActive } = useAuth();
 
   // Form state
   const [ign, setIgn] = useState("");
@@ -52,103 +41,16 @@ export default function WhitelistPage() {
     message: string;
   }>({ type: null, message: "" });
 
-  // User status state
-  const [userData, setUserData] = useState<any>(null);
+  // User status state - simplified to use existing auth data
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
-  const [isLoadingUserData, setIsLoadingUserData] = useState(false);
-  const [dataFetchAttempted, setDataFetchAttempted] = useState(false);
 
-  // Mobile-optimized data fetching with shorter timeout and better error handling
+  // Determine user status based on existing auth context data
   useEffect(() => {
-    let isCancelled = false;
-    
-    const fetchUserData = async () => {
-      // If we already attempted or still loading auth, skip
-      if (dataFetchAttempted || authLoading || !user) {
-        if (!user) {
-          setUserStatus({
-            type: "not_logged_in",
-            showForm: false,
-            showCountdown: false,
-          });
-        }
-        return;
-      }
-
-      setIsLoadingUserData(true);
-      setDataFetchAttempted(true);
-
-      try {
-        const discordId = getDiscordId(user);
-        if (!discordId) {
-          console.warn("Could not determine Discord ID for whitelist");
-          // Don't show error to user, just default to eligible
-          if (!isCancelled) {
-            setUserStatus({
-              type: "eligible",
-              showForm: true,
-              showCountdown: false,
-            });
-          }
-          return;
-        }
-
-        // Create supabase client only for data fetching
-        const supabase = createClient();
-        
-        // Use shorter timeout for mobile devices
-        const timeoutMs = isMobile() ? MOBILE_TIMEOUT : DESKTOP_TIMEOUT;
-        
-        // Create a promise with race condition for timeout
-        const fetchPromise = supabase
-          .from("users")
-          .select("hub_trial, revoked, trial_expiration")
-          .eq("discord_id", discordId)
-          .single();
-
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-        );
-
-        const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
-
-        // If component unmounted, don't update state
-        if (isCancelled) return;
-
-        if (error && error.code !== "PGRST116") {
-          console.warn("Non-critical error fetching user data:", error);
-          // Default to eligible state instead of showing error
-          setUserData({ hub_trial: false, revoked: true, trial_expiration: null });
-        } else {
-          setUserData(data || { hub_trial: false, revoked: true, trial_expiration: null });
-        }
-
-      } catch (error) {
-        console.warn("User data fetch failed, using default state:", error);
-        // Default to eligible state for better UX
-        if (!isCancelled) {
-          setUserData({ hub_trial: false, revoked: true, trial_expiration: null });
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoadingUserData(false);
-        }
-      }
-    };
-
-    // Only run when auth is stable and user is defined
-    if (!authLoading && user !== undefined) {
-      fetchUserData();
+    if (authLoading) {
+      // Don't set status while auth is loading
+      return;
     }
 
-    // Cleanup function
-    return () => {
-      isCancelled = true;
-    };
-  }, [user, authLoading, dataFetchAttempted]);
-
-  // Determine user status
-  useEffect(() => {
     if (!user) {
       setUserStatus({
         type: "not_logged_in",
@@ -158,46 +60,36 @@ export default function WhitelistPage() {
       return;
     }
 
-    if (userData) {
-      const now = new Date();
-      const isTrialActive =
-        userData.trial_expiration && new Date(userData.trial_expiration) > now;
-
-      if (userData.revoked === false && isTrialActive) {
-        setUserStatus({
-          type: "whitelisted_trial",
-          showForm: false,
-          showCountdown: true,
-        });
-      } else if (userData.revoked === false) {
-        setUserStatus({
-          type: "whitelisted",
-          showForm: false,
-          showCountdown: false,
-        });
-      } else if (userData.hub_trial && isTrialActive) {
-        setUserStatus({
-          type: "active_trial",
-          showForm: false,
-          showCountdown: true,
-        });
-      } else if (userData.hub_trial) {
-        setUserStatus({
-          type: "expired_trial",
-          showForm: false,
-          showCountdown: false,
-        });
-      } else {
-        setUserStatus({
-          type: "eligible",
-          showForm: true,
-          showCountdown: false,
-        });
-      }
+    // Use existing auth context data instead of making additional API calls
+    if (hasAccess && isTrialActive) {
+      setUserStatus({
+        type: "whitelisted_trial",
+        showForm: false,
+        showCountdown: true,
+      });
+    } else if (hasAccess) {
+      setUserStatus({
+        type: "whitelisted",
+        showForm: false,
+        showCountdown: false,
+      });
+    } else if (isTrialActive) {
+      setUserStatus({
+        type: "active_trial", 
+        showForm: false,
+        showCountdown: true,
+      });
+    } else {
+      // Default to eligible for form submission
+      setUserStatus({
+        type: "eligible",
+        showForm: true,
+        showCountdown: false,
+      });
     }
-  }, [userData, user]);
+  }, [user, authLoading, hasAccess, isTrialActive]);
 
-  // Handle form submission with mobile optimization
+  // Handle form submission using only auth context session
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -234,56 +126,61 @@ export default function WhitelistPage() {
       // Calculate trial end time (7 days from now in Unix timestamp)
       const trialEnds = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
 
-      // Use session token from auth context
+      // Use session token from auth context - no additional auth calls
       const token = session.access_token;
 
       if (!token) {
         throw new Error("Authentication token not available");
       }
 
-      // Mobile-optimized fetch with shorter timeout
-      const fetchTimeoutMs = isMobile() ? 8000 : 12000;
-      
-      const fetchPromise = fetch(
-        "https://dsexkdjxmhgqahrlkvax.functions.supabase.co/sendDiscordWebhook",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            discordId,
-            discordUsername,
-            ign,
-            referral: referral.trim() || "None",
-            trialEnds,
-          }),
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 second timeout
+
+      try {
+        const response = await fetch(
+          "https://dsexkdjxmhgqahrlkvax.functions.supabase.co/sendDiscordWebhook",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              discordId,
+              discordUsername,
+              ign,
+              referral: referral.trim() || "None",
+              trialEnds,
+            }),
+            signal: controller.signal,
+          }
+        );
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to activate trial");
         }
-      );
 
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout')), fetchTimeoutMs)
-      );
+        setStatusMessage({
+          type: "success",
+          message: "✅ Trial activated! You now have 7 days of premium access.",
+        });
+        setIgn("");
+        setReferral("");
 
-      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to activate trial");
+        // Reload the page after success
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error("Request timed out. Please try again.");
+        }
+        throw fetchError;
       }
-
-      setStatusMessage({
-        type: "success",
-        message: "✅ Trial activated! You now have 7 days of premium access.",
-      });
-      setIgn("");
-      setReferral("");
-
-      // Reload the page after success
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
     } catch (error) {
       console.error("Error submitting whitelist request:", error);
       setStatusMessage({
@@ -298,45 +195,12 @@ export default function WhitelistPage() {
     }
   };
 
-  // Countdown timer component
-  const CountdownTimer = ({ expirationTime }: { expirationTime: string }) => {
-    const [timeLeft, setTimeLeft] = useState<string>("");
-
-    useEffect(() => {
-      const expiration = new Date(expirationTime);
-
-      const updateCountdown = () => {
-        const now = new Date();
-        const diff = expiration.getTime() - now.getTime();
-
-        if (diff <= 0) {
-          setTimeLeft("⏰ Your trial has expired.");
-          return;
-        }
-
-        const totalSeconds = Math.floor(diff / 1000);
-        const days = Math.floor(totalSeconds / 86400);
-        const hours = Math.floor((totalSeconds % 86400) / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const seconds = totalSeconds % 60;
-
-        let display = "⏳ Trial ends in: ";
-        if (days > 0) display += `${days}d `;
-        if (hours > 0 || days > 0) display += `${hours}h `;
-        display += `${minutes}m ${seconds}s`;
-
-        setTimeLeft(display);
-      };
-
-      updateCountdown();
-      const timer = setInterval(updateCountdown, 1000);
-
-      return () => clearInterval(timer);
-    }, [expirationTime]);
-
+  // Simple countdown timer component (placeholder - would need trial expiration data from auth context)
+  const CountdownTimer = () => {
     return (
       <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 backdrop-blur-sm text-blue-300 p-4 sm:p-6 rounded-2xl text-center my-6 animate-pulse-soft">
-        <div className="text-xl sm:text-2xl font-bold mb-2 break-words">{timeLeft}</div>
+        <div className="text-xl sm:text-2xl font-bold mb-2 break-words">⏳ Trial Active</div>
+        <p className="text-sm">Your trial is currently active.</p>
       </div>
     );
   };
@@ -521,8 +385,8 @@ export default function WhitelistPage() {
                   <div className="mb-6 sm:mb-8">
                     <StatusMessage status={userStatus} />
 
-                    {userStatus.showCountdown && userData?.trial_expiration && (
-                      <CountdownTimer expirationTime={userData.trial_expiration} />
+                    {userStatus.showCountdown && (
+                      <CountdownTimer />
                     )}
                   </div>
                 )}
@@ -868,24 +732,6 @@ export default function WhitelistPage() {
           .animate-pulse-soft,
           .animate-pulse-slow {
             will-change: transform, opacity;
-          }
-        }
-
-        /* Mobile-specific performance optimizations */
-        @media (max-width: 768px) {
-          /* Reduce GPU usage on mobile */
-          .animate-float,
-          .animate-float-delayed {
-            animation-duration: 8s;
-          }
-          
-          /* Simplify blur effects on mobile */
-          .backdrop-blur-xl {
-            backdrop-filter: blur(8px);
-          }
-          
-          .backdrop-blur-2xl {
-            backdrop-filter: blur(12px);
           }
         }
       `}</style>
