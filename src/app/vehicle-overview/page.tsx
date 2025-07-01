@@ -196,7 +196,7 @@ const VEHICLES: Vehicle[] = [
   {
     "name": "S105 Car",
     "price": 85000,
-    "ores": 18,
+    "ores": 13,
     "photo": "/images/s105car.png",
     "colors": "Light Blue, Tan, Dark Blue, Brown, Dark Red, Green, Olive, Red, White, Yellow",
     "whereToBuy": "Import Vehicles (Meaux, Regina)",

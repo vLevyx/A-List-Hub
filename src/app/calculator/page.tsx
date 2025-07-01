@@ -42,12 +42,28 @@ interface CalculationResults {
   hqBreakdown: { [key: string]: { [key: string]: number } };
   nonHQBreakdown: { [key: string]: { [key: string]: number } };
   materialRuns: {
-    runDetails: { [key: string]: number };
-    totalRuns: number;
-    totalRawResources: number;
-    totalCap: number;
-    vehicle: string;
-    backpack: string;
+    fuelTruckRuns?: {
+      runDetails: { [key: string]: number };
+      totalRuns: number;
+      totalResources: number;
+      totalCap: number;
+      vehicle: string;
+      backpack: string;
+    };
+    cargoTruckRuns?: {
+      runDetails: { [key: string]: number };
+      totalRuns: number;
+      totalResources: number;
+      totalCap: number;
+      vehicle: string;
+      backpack: string;
+    };
+    transportRequirements: {
+      needsFuelTruck: boolean;
+      needsCargoTruck: boolean;
+      fuelResources: string[];
+      cargoResources: string[];
+    };
   };
   craftingTime?: {
     totalTime: number;
@@ -71,7 +87,8 @@ export default function CalculatorPage() {
   const [quantity, setQuantity] = useState(1);
   const [showAllBlueprints, setShowAllBlueprints] = useState(false);
   const [availableItems, setAvailableItems] = useState<string[]>([]);
-  const [selectedVehicle, setSelectedVehicle] = useState("");
+  const [selectedFuelVehicle, setSelectedFuelVehicle] = useState("");
+  const [selectedCargoVehicle, setSelectedCargoVehicle] = useState("");
   const [selectedBackpack, setSelectedBackpack] = useState("");
   const [kit, setKit] = useState<KitItem[]>([]);
   const [showKitSidebar, setShowKitSidebar] = useState(false);
@@ -503,7 +520,6 @@ export default function CalculatorPage() {
       "M923A1 Transport Truck - Canopy": 83,
       "Pickup Truck": 18,
       "UAZ-452 Off-Road": 28,
-      "UAZ-452 Off-Road - Laboratory": { canisters: 110 },
       "UAZ-452 Off-Road - Banana": 28,
       "UAZ-469 Off-Road": 13,
       "UAZ-469 Off-Road - Open Top": 13,
@@ -1431,6 +1447,38 @@ export default function CalculatorPage() {
     "Wooden Plank",
   ];
 
+  // Define which resources need fuel trucks (liquid resources)
+  const fuelTruckResources = ["Polyester", "Petrol"];
+  
+  // Define which resources need cargo trucks (solid resources)
+  const cargoTruckResources = [
+    "Fabric",
+    "Iron Ingot", 
+    "Copper Ingot",
+    "Glass",
+    "Component",
+    "Charcoal",
+    "Gold Ingot",
+    "Silver Ingot",
+    "Wooden Plank",
+  ];
+
+  // Helper function to check if vehicle is a fuel truck
+  const isFuelTruck = (vehicleName: string): boolean => {
+    const vehicleData = storageOptions.vehicles[vehicleName];
+    return Boolean(vehicleData && typeof vehicleData === 'object' && 'canisters' in vehicleData);
+  };
+
+  // Helper function to get fuel trucks
+  const getFuelTrucks = (): string[] => {
+    return Object.keys(storageOptions.vehicles).filter(isFuelTruck);
+  };
+
+  // Helper function to get cargo vehicles (now includes fuel trucks since they can carry solid resources too)
+  const getCargoVehicles = (): string[] => {
+    return Object.keys(storageOptions.vehicles); // All vehicles can carry solid resources
+  };
+
   // Crafting times in seconds
   const craftingTimes: CraftingTimes = {
     // Base Components (seconds per unit)
@@ -1649,6 +1697,12 @@ export default function CalculatorPage() {
 
       const allItems = itemsByCategory[selectedCategory] || [];
 
+      // Always show Components and HQ Components regardless of toggle setting
+      if (selectedCategory === "Components" || selectedCategory === "HQ Components") {
+        setAvailableItems(allItems);
+        return;
+      }
+
       if (showAllBlueprints) {
         setAvailableItems(allItems);
         return;
@@ -1698,6 +1752,20 @@ export default function CalculatorPage() {
   useEffect(() => {
     setSelectedItem("");
   }, [selectedCategory]);
+
+  // Auto-calculate when item or vehicles change
+  useEffect(() => {
+    if (selectedItem && selectedCategory !== "--") {
+      calculateResources();
+    }
+  }, [selectedItem, selectedCategory, quantity, selectedFuelVehicle, selectedCargoVehicle, selectedBackpack]);
+
+  // Auto-calculate kit when vehicles change
+  useEffect(() => {
+    if (kit.length > 0 && results) {
+      calculateKitQueue();
+    }
+  }, [selectedFuelVehicle, selectedCargoVehicle, selectedBackpack]);
 
   // Helper functions
   const calculateCraftingTime = (
@@ -1793,15 +1861,18 @@ export default function CalculatorPage() {
 
       const sub = componentResources[compName];
 
+      // If this is a component (not a raw resource), add it to components map
       if (isComponent && sub) {
         componentsMap[compName] = (componentsMap[compName] || 0) + qty;
       }
 
+      // If there's no sub-recipe, it's a raw resource
       if (!sub) {
         localMap[compName] = (localMap[compName] || 0) + qty;
         return;
       }
 
+      // Recursively break down the component into its sub-components/resources
       for (const [subName, subQty] of Object.entries(sub)) {
         helper(subName, subQty * qty);
       }
@@ -1809,6 +1880,117 @@ export default function CalculatorPage() {
 
     helper(componentName, quantity);
     return { resources: localMap, components: componentsMap };
+  };
+
+  // Helper function to analyze transport requirements
+  const analyzeTransportRequirements = (totalResources: { [key: string]: number }) => {
+    const fuelResources: string[] = [];
+    const cargoResources: string[] = [];
+    
+    for (const [resource, amount] of Object.entries(totalResources)) {
+      if (resourcesList.includes(resource)) {
+        if (fuelTruckResources.includes(resource)) {
+          fuelResources.push(resource);
+        } else if (cargoTruckResources.includes(resource)) {
+          cargoResources.push(resource);
+        }
+      }
+    }
+    
+    return {
+      needsFuelTruck: fuelResources.length > 0,
+      needsCargoTruck: cargoResources.length > 0,
+      fuelResources,
+      cargoResources,
+    };
+  };
+
+  const calculateMaterialRuns = (totalResources: { [key: string]: number }) => {
+    const transportRequirements = analyzeTransportRequirements(totalResources);
+    
+    let fuelTruckRuns = undefined;
+    let cargoTruckRuns = undefined;
+
+    // Calculate fuel truck runs if needed
+    if (transportRequirements.needsFuelTruck) {
+      let fuelVehicleCap = 0;
+      const fuelVehicleData = storageOptions.vehicles[selectedFuelVehicle];
+      if (fuelVehicleData !== undefined && typeof fuelVehicleData === 'object' && 'canisters' in fuelVehicleData) {
+        fuelVehicleCap = fuelVehicleData.canisters;
+      }
+
+      const backpackCap = storageOptions.backpacks[selectedBackpack] || 0;
+      const totalFuelCap = fuelVehicleCap + backpackCap;
+
+      let totalFuelResources = 0;
+      let totalFuelRuns = 0;
+      const fuelRunDetails: { [key: string]: number } = {};
+
+      for (const [resource, amount] of Object.entries(totalResources)) {
+        if (fuelTruckResources.includes(resource) && resourcesList.includes(resource)) {
+          const runsNeeded = totalFuelCap > 0 ? Math.ceil(amount / totalFuelCap) : 0;
+          fuelRunDetails[resource] = runsNeeded;
+          totalFuelResources += amount;
+          totalFuelRuns += runsNeeded;
+        }
+      }
+
+      fuelTruckRuns = {
+        runDetails: fuelRunDetails,
+        totalRuns: totalFuelRuns,
+        totalResources: totalFuelResources,
+        totalCap: totalFuelCap,
+        vehicle: selectedFuelVehicle,
+        backpack: selectedBackpack,
+      };
+    }
+
+    // Calculate cargo truck runs if needed
+    if (transportRequirements.needsCargoTruck) {
+      let cargoVehicleCap = 0;
+      const cargoVehicleData = storageOptions.vehicles[selectedCargoVehicle];
+      
+      // Handle both fuel trucks (which can carry solid resources) and regular cargo vehicles
+      if (cargoVehicleData !== undefined) {
+        if (typeof cargoVehicleData === 'number') {
+          cargoVehicleCap = cargoVehicleData;
+        } else if (typeof cargoVehicleData === 'object' && 'canisters' in cargoVehicleData) {
+          // Fuel trucks can carry the same amount of solid resources as liquid resources
+          cargoVehicleCap = cargoVehicleData.canisters;
+        }
+      }
+
+      const backpackCap = storageOptions.backpacks[selectedBackpack] || 0;
+      const totalCargoCap = cargoVehicleCap + backpackCap;
+
+      let totalCargoResources = 0;
+      let totalCargoRuns = 0;
+      const cargoRunDetails: { [key: string]: number } = {};
+
+      for (const [resource, amount] of Object.entries(totalResources)) {
+        if (cargoTruckResources.includes(resource) && resourcesList.includes(resource)) {
+          const runsNeeded = totalCargoCap > 0 ? Math.ceil(amount / totalCargoCap) : 0;
+          cargoRunDetails[resource] = runsNeeded;
+          totalCargoResources += amount;
+          totalCargoRuns += runsNeeded;
+        }
+      }
+
+      cargoTruckRuns = {
+        runDetails: cargoRunDetails,
+        totalRuns: totalCargoRuns,
+        totalResources: totalCargoResources,
+        totalCap: totalCargoCap,
+        vehicle: selectedCargoVehicle,
+        backpack: selectedBackpack,
+      };
+    }
+
+    return {
+      fuelTruckRuns,
+      cargoTruckRuns,
+      transportRequirements,
+    };
   };
 
   const calculateResources = () => {
@@ -1857,8 +2039,34 @@ export default function CalculatorPage() {
         itemData["Resources"]
       )) {
         const resourceQuantity = resourceQty * quantity;
-        totalResources[resource] =
-          (totalResources[resource] || 0) + resourceQuantity;
+        // Check if this "resource" is actually a component that needs to be crafted
+        const isComponent = [
+          "Cloth",
+          "Iron Plate",
+          "Component",
+          "Tempered Glass",
+          "Weapon Part",
+          "Stabilizer",
+          "Attachment Part",
+          "Ammo",
+          "Mechanical Component",
+          "Engine Part",
+          "Interior Part",
+          "Rotor",
+        ].includes(resource);
+
+        if (isComponent) {
+          // Add to components and break down into base resources
+          totalComponents[resource] = (totalComponents[resource] || 0) + resourceQuantity;
+          
+          const { resources: resMap } = collectBaseResources(resource, resourceQuantity);
+          for (const [res, qty] of Object.entries(resMap)) {
+            totalResources[res] = (totalResources[res] || 0) + qty;
+          }
+        } else {
+          // It's a true raw resource
+          totalResources[resource] = (totalResources[resource] || 0) + resourceQuantity;
+        }
       }
     }
 
@@ -1903,42 +2111,6 @@ export default function CalculatorPage() {
       materialRuns,
       craftingTime,
     });
-  };
-
-  const calculateMaterialRuns = (totalResources: { [key: string]: number }) => {
-    let vehicleCap = 0;
-    const vehicleData = storageOptions.vehicles[selectedVehicle];
-    if (vehicleData !== undefined) {
-      vehicleCap =
-        typeof vehicleData === "number"
-          ? vehicleData
-          : vehicleData.canisters || 0;
-    }
-
-    const backpackCap = storageOptions.backpacks[selectedBackpack] || 0;
-    const totalCap = vehicleCap + backpackCap;
-
-    let totalRawResources = 0;
-    let totalRuns = 0;
-    const runDetails: { [key: string]: number } = {};
-
-    for (const [resource, amount] of Object.entries(totalResources)) {
-      if (resourcesList.includes(resource)) {
-        const runsNeeded = totalCap > 0 ? Math.ceil(amount / totalCap) : 0;
-        runDetails[resource] = runsNeeded;
-        totalRawResources += amount;
-        totalRuns += runsNeeded;
-      }
-    }
-
-    return {
-      runDetails,
-      totalRuns,
-      totalRawResources,
-      totalCap,
-      vehicle: selectedVehicle,
-      backpack: selectedBackpack,
-    };
   };
 
   const addToKit = () => {
@@ -2025,8 +2197,34 @@ export default function CalculatorPage() {
           itemData["Resources"]
         )) {
           const resourceQuantity = resourceQty * itemQuantity;
-          totalResources[resource] =
-            (totalResources[resource] || 0) + resourceQuantity;
+          // Check if this "resource" is actually a component that needs to be crafted
+          const isComponent = [
+            "Cloth",
+            "Iron Plate",
+            "Component",
+            "Tempered Glass",
+            "Weapon Part",
+            "Stabilizer",
+            "Attachment Part",
+            "Ammo",
+            "Mechanical Component",
+            "Engine Part",
+            "Interior Part",
+            "Rotor",
+          ].includes(resource);
+
+          if (isComponent) {
+            // Add to components and break down into base resources
+            totalComponents[resource] = (totalComponents[resource] || 0) + resourceQuantity;
+            
+            const { resources: resMap } = collectBaseResources(resource, resourceQuantity);
+            for (const [res, qty] of Object.entries(resMap)) {
+              totalResources[res] = (totalResources[res] || 0) + qty;
+            }
+          } else {
+            // It's a true raw resource
+            totalResources[resource] = (totalResources[resource] || 0) + resourceQuantity;
+          }
         }
       }
 
@@ -2094,6 +2292,12 @@ export default function CalculatorPage() {
   if (!hasAccess) {
     return null;
   }
+
+  // Check if transport requirements analysis is needed
+  const transportRequirements = results?.materialRuns?.transportRequirements;
+  const needsBothVehicles = transportRequirements?.needsFuelTruck && transportRequirements?.needsCargoTruck;
+  const needsOnlyFuel = transportRequirements?.needsFuelTruck && !transportRequirements?.needsCargoTruck;
+  const needsOnlyCargo = !transportRequirements?.needsFuelTruck && transportRequirements?.needsCargoTruck;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background-primary via-background-secondary to-background-primary">
@@ -2224,30 +2428,111 @@ export default function CalculatorPage() {
                 Your Transport Kit
               </h3>
 
+              {/* Transport Requirements Warning */}
+              {transportRequirements && (
+                <div className="mb-4 p-4 bg-blue-500/20 border border-blue-500/50 rounded-lg">
+                  <div className="text-white font-semibold mb-2">Transport Requirements:</div>
+                  {needsBothVehicles && (
+                    <div className="text-yellow-300">
+                      ⚠️ Multiple vehicle types required for this selection
+                    </div>
+                  )}
+                  {transportRequirements.needsFuelTruck && (
+                    <div className="text-blue-300">
+                      🛢️ Fuel Truck needed for: {transportRequirements.fuelResources.join(", ")}
+                    </div>
+                  )}
+                  {transportRequirements.needsCargoTruck && (
+                    <div className="text-green-300">
+                      📦 Cargo Vehicle needed for: {transportRequirements.cargoResources.join(", ")}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                {/* Fuel Vehicle Selection */}
                 <div>
                   <label
-                    htmlFor="vehicleSelect"
+                    htmlFor="fuelVehicleSelect"
                     className="block text-white/90 font-medium mb-2"
                   >
-                    Select Transport Vehicle:
+                    Select Fuel Truck:
+                    {transportRequirements?.needsFuelTruck && (
+                      <span className="text-blue-300 ml-1">*Required</span>
+                    )}
                   </label>
                   <select
-                    id="vehicleSelect"
-                    value={selectedVehicle}
-                    onChange={(e) => setSelectedVehicle(e.target.value)}
-                    className="w-full min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none text-base"
+                    id="fuelVehicleSelect"
+                    value={selectedFuelVehicle}
+                    onChange={(e) => setSelectedFuelVehicle(e.target.value)}
+                    disabled={!transportRequirements?.needsFuelTruck}
+                    className={`w-full min-h-[44px] p-3 bg-background-tertiary border rounded-lg text-white focus:outline-none text-base ${
+                      transportRequirements?.needsFuelTruck 
+                        ? "border-blue-500 focus:border-blue-400" 
+                        : "border-white/20 opacity-50"
+                    }`}
                   >
-                    <option value="">-- Select Vehicle --</option>
-                    {Object.keys(storageOptions.vehicles).map((vehicle) => (
-                      <option key={vehicle} value={vehicle}>
-                        {vehicle}
-                      </option>
-                    ))}
+                    <option value="">-- Select Fuel Truck --</option>
+                    {getFuelTrucks().map((vehicle) => {
+                      const vehicleData = storageOptions.vehicles[vehicle];
+                      const canisters = typeof vehicleData === 'object' && 'canisters' in vehicleData 
+                        ? vehicleData.canisters 
+                        : 0;
+                      return (
+                        <option key={vehicle} value={vehicle}>
+                          {vehicle} ({canisters} canisters)
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
+                {/* Cargo Vehicle Selection */}
                 <div>
+                  <label
+                    htmlFor="cargoVehicleSelect"
+                    className="block text-white/90 font-medium mb-2"
+                  >
+                    Select Cargo Vehicle:
+                    {transportRequirements?.needsCargoTruck && (
+                      <span className="text-green-300 ml-1">*Required</span>
+                    )}
+                  </label>
+                  <select
+                    id="cargoVehicleSelect"
+                    value={selectedCargoVehicle}
+                    onChange={(e) => setSelectedCargoVehicle(e.target.value)}
+                    disabled={!transportRequirements?.needsCargoTruck}
+                    className={`w-full min-h-[44px] p-3 bg-background-tertiary border rounded-lg text-white focus:outline-none text-base ${
+                      transportRequirements?.needsCargoTruck 
+                        ? "border-green-500 focus:border-green-400" 
+                        : "border-white/20 opacity-50"
+                    }`}
+                  >
+                    <option value="">-- Select Cargo Vehicle --</option>
+                    {getCargoVehicles().map((vehicle) => {
+                      const vehicleData = storageOptions.vehicles[vehicle];
+                      let storage = 0;
+                      
+                      if (typeof vehicleData === 'number') {
+                        storage = vehicleData;
+                      } else if (typeof vehicleData === 'object' && 'canisters' in vehicleData) {
+                        // Fuel trucks can carry the same amount of solid resources as liquid resources
+                        storage = vehicleData.canisters;
+                      }
+                      
+                      return (
+                        <option key={vehicle} value={vehicle}>
+                          {vehicle} ({storage} storage)
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* Backpack Selection - spans both columns */}
+                <div className="lg:col-span-2">
                   <label
                     htmlFor="backpackSelect"
                     className="block text-white/90 font-medium mb-2"
@@ -2263,7 +2548,7 @@ export default function CalculatorPage() {
                     <option value="">-- Select Backpack --</option>
                     {Object.keys(storageOptions.backpacks).map((backpack) => (
                       <option key={backpack} value={backpack}>
-                        {backpack}
+                        {backpack} ({storageOptions.backpacks[backpack]} storage)
                       </option>
                     ))}
                   </select>
@@ -2356,31 +2641,99 @@ export default function CalculatorPage() {
                 {results.materialRuns && (
                   <div className="mt-6">
                     <h2 className="text-xl font-semibold text-primary-500 border-b border-gray-600 pb-2 mb-4">
-                      Runs Needed
+                      Transport Operations
                     </h2>
-                    {results.materialRuns.totalCap === 0 ? (
-                      <p className="text-red-400">
-                        Please select a valid transport vehicle and backpack.
-                      </p>
-                    ) : (
-                      <div>
-                        {Object.entries(results.materialRuns.runDetails).map(
-                          ([resource, runs]) => (
-                            <div key={resource} className="text-white/90">
-                              {resource}: {runs} run(s)
+                    
+                    {/* Fuel Truck Operations */}
+                    {results.materialRuns.fuelTruckRuns && (
+                      <div className="mb-4 p-4 bg-blue-500/20 border border-blue-500/50 rounded-lg">
+                        <h3 className="text-blue-300 font-semibold mb-2 flex items-center">
+                          🛢️ Fuel Truck Operations
+                        </h3>
+                        {results.materialRuns.fuelTruckRuns.totalCap === 0 ? (
+                          <p className="text-red-400">
+                            Please select a valid fuel truck and backpack.
+                          </p>
+                        ) : (
+                          <div>
+                            {Object.entries(results.materialRuns.fuelTruckRuns.runDetails).map(
+                              ([resource, runs]) => (
+                                <div key={resource} className="text-white/90">
+                                  {resource}: {runs} run(s)
+                                </div>
+                              )
+                            )}
+                            <div className="mt-2 font-semibold text-blue-200">
+                              Total: <strong>{results.materialRuns.fuelTruckRuns.totalRuns}</strong> fuel truck run(s) 
+                              for <strong>{results.materialRuns.fuelTruckRuns.totalResources}</strong> liquid resources
+                              using <strong>{results.materialRuns.fuelTruckRuns.vehicle}</strong>
+                              {results.materialRuns.fuelTruckRuns.backpack && 
+                                ` + ${results.materialRuns.fuelTruckRuns.backpack}`
+                              }
                             </div>
-                          )
+                          </div>
                         )}
-                        <div className="mt-4 font-semibold text-white">
-                          You will need{" "}
-                          <strong>{results.materialRuns.totalRuns}</strong>{" "}
-                          run(s) to transport{" "}
-                          <strong>
-                            {results.materialRuns.totalRawResources}
-                          </strong>{" "}
-                          raw resources using{" "}
-                          <strong>{results.materialRuns.vehicle}</strong> and{" "}
-                          <strong>{results.materialRuns.backpack}</strong>.
+                      </div>
+                    )}
+
+                    {/* Cargo Truck Operations */}
+                    {results.materialRuns.cargoTruckRuns && (
+                      <div className="mb-4 p-4 bg-green-500/20 border border-green-500/50 rounded-lg">
+                        <h3 className="text-green-300 font-semibold mb-2 flex items-center">
+                          📦 Cargo Vehicle Operations
+                        </h3>
+                        {results.materialRuns.cargoTruckRuns.totalCap === 0 ? (
+                          <p className="text-red-400">
+                            Please select a valid cargo vehicle and backpack.
+                          </p>
+                        ) : (
+                          <div>
+                            {Object.entries(results.materialRuns.cargoTruckRuns.runDetails).map(
+                              ([resource, runs]) => (
+                                <div key={resource} className="text-white/90">
+                                  {resource}: {runs} run(s)
+                                </div>
+                              )
+                            )}
+                            <div className="mt-2 font-semibold text-green-200">
+                              Total: <strong>{results.materialRuns.cargoTruckRuns.totalRuns}</strong> cargo vehicle run(s) 
+                              for <strong>{results.materialRuns.cargoTruckRuns.totalResources}</strong> solid resources
+                              using <strong>{results.materialRuns.cargoTruckRuns.vehicle}</strong>
+                              {results.materialRuns.cargoTruckRuns.backpack && 
+                                ` + ${results.materialRuns.cargoTruckRuns.backpack}`
+                              }
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Total Summary */}
+                    {(results.materialRuns.fuelTruckRuns || results.materialRuns.cargoTruckRuns) && (
+                      <div className="mt-4 p-4 bg-primary-500/20 border border-primary-500/50 rounded-lg">
+                        <h3 className="text-primary-300 font-semibold mb-2">
+                          📋 Total Transport Summary
+                        </h3>
+                        <div className="text-white font-semibold">
+                          You will need:{" "}
+                          {results.materialRuns.fuelTruckRuns && (
+                            <span className="text-blue-300">
+                              {results.materialRuns.fuelTruckRuns.totalRuns} fuel truck run(s)
+                            </span>
+                          )}
+                          {results.materialRuns.fuelTruckRuns && results.materialRuns.cargoTruckRuns && (
+                            <span className="text-white"> + </span>
+                          )}
+                          {results.materialRuns.cargoTruckRuns && (
+                            <span className="text-green-300">
+                              {results.materialRuns.cargoTruckRuns.totalRuns} cargo vehicle run(s)
+                            </span>
+                          )}
+                          {" = "}
+                          <span className="text-primary-300">
+                            {(results.materialRuns.fuelTruckRuns?.totalRuns || 0) + 
+                             (results.materialRuns.cargoTruckRuns?.totalRuns || 0)} total run(s)
+                          </span>
                         </div>
                       </div>
                     )}
@@ -2444,7 +2797,7 @@ export default function CalculatorPage() {
 
             {/* Footer */}
             <div className="text-center mt-8 text-white/50">
-              <p>Updated | June 24, 2025</p>
+              <p>Updated | June 30, 2025</p>
             </div>
           </div>
         </div>
