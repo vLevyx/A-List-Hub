@@ -4,6 +4,8 @@ import { usePageTracking } from "@/hooks/usePageTracking";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, ChevronRight, Sparkles } from "lucide-react";
 
 // Types
 interface ItemComponents {
@@ -85,7 +87,7 @@ export default function CalculatorPage() {
   const [selectedCategory, setSelectedCategory] = useState("--");
   const [selectedItem, setSelectedItem] = useState("");
   const [quantity, setQuantity] = useState(1);
-  const [showAllBlueprints, setShowAllBlueprints] = useState(false);
+  const [showAllBlueprints, setShowAllBlueprints] = useState(true);
   const [availableItems, setAvailableItems] = useState<string[]>([]);
   const [selectedFuelVehicle, setSelectedFuelVehicle] = useState("");
   const [selectedCargoVehicle, setSelectedCargoVehicle] = useState("");
@@ -94,6 +96,284 @@ export default function CalculatorPage() {
   const [showKitSidebar, setShowKitSidebar] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [results, setResults] = useState<CalculationResults | null>(null);
+
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [currentTourStep, setCurrentTourStep] = useState(0);
+
+  // Constants
+  const ONBOARDING_COMPLETED_KEY = "calculator_onboarding_completed";
+
+  // ============================================================================
+  // ONBOARDING TOOLTIP COMPONENT
+  // ============================================================================
+
+  interface TooltipStep {
+    id: string;
+    target: string;
+    title: string;
+    content: string;
+    placement: "top" | "bottom" | "left" | "right";
+    showNextButton?: boolean;
+  }
+
+  interface OnboardingTooltipProps {
+    step: TooltipStep;
+    isVisible: boolean;
+    onNext: () => void;
+    onSkip: () => void;
+    currentStep: number;
+    totalSteps: number;
+  }
+
+  const OnboardingTooltip = ({
+    step,
+    isVisible,
+    onNext,
+    onSkip,
+    currentStep,
+    totalSteps,
+  }: OnboardingTooltipProps) => {
+    const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+    const [isPositioned, setIsPositioned] = useState(false);
+
+    useEffect(() => {
+      if (isVisible && step.target) {
+        const updatePosition = () => {
+          const element = document.querySelector(
+            `[data-tour="${step.target}"]`
+          );
+          if (element) {
+            const rect = element.getBoundingClientRect();
+            setTargetRect(rect);
+            setIsPositioned(true);
+          }
+        };
+
+        updatePosition();
+        window.addEventListener("resize", updatePosition);
+        window.addEventListener("scroll", updatePosition);
+
+        return () => {
+          window.removeEventListener("resize", updatePosition);
+          window.removeEventListener("scroll", updatePosition);
+        };
+      }
+    }, [isVisible, step.target]);
+
+    const getTooltipPosition = useMemo(() => {
+      if (!targetRect) return { top: 0, left: 0 };
+
+      const tooltipWidth = 320;
+      const tooltipHeight = 140;
+      const gap = 12;
+
+      let top = 0;
+      let left = 0;
+
+      switch (step.placement) {
+        case "top":
+          top = targetRect.top - tooltipHeight - gap;
+          left = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
+          break;
+        case "bottom":
+          top = targetRect.bottom + gap;
+          left = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
+          break;
+        case "left":
+          top = targetRect.top + targetRect.height / 2 - tooltipHeight / 2;
+          left = targetRect.left - tooltipWidth - gap;
+          break;
+        case "right":
+          top = targetRect.top + targetRect.height / 2 - tooltipHeight / 2;
+          left = targetRect.right + gap;
+          break;
+      }
+
+      // Keep tooltip within viewport
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      if (left < 10) left = 10;
+      if (left + tooltipWidth > viewportWidth - 10)
+        left = viewportWidth - tooltipWidth - 10;
+      if (top < 10) top = 10;
+      if (top + tooltipHeight > viewportHeight - 10)
+        top = viewportHeight - tooltipHeight - 10;
+
+      return { top, left };
+    }, [targetRect, step.placement]);
+
+    if (!isVisible || !isPositioned) return null;
+
+    return (
+      <>
+        {/* Backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9998]"
+          onClick={onSkip}
+        />
+
+        {/* Highlight ring */}
+        {targetRect && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed z-[9999] pointer-events-none"
+            style={{
+              top: targetRect.top - 4,
+              left: targetRect.left - 4,
+              width: targetRect.width + 8,
+              height: targetRect.height + 8,
+            }}
+          >
+            <div className="w-full h-full rounded-xl border-2 border-[#00c6ff] shadow-[0_0_0_4px_rgba(0,198,255,0.3)] bg-[#00c6ff]/10" />
+          </motion.div>
+        )}
+
+        {/* Tooltip */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 10 }}
+          className="fixed z-[10000] w-80 bg-[#141414]/95 backdrop-blur-xl border border-[#00c6ff]/30 rounded-2xl p-6 shadow-2xl"
+          style={{
+            top: getTooltipPosition.top,
+            left: getTooltipPosition.left,
+          }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-[#00c6ff]" />
+              <h3 className="text-lg font-semibold text-white">{step.title}</h3>
+            </div>
+            <button
+              onClick={onSkip}
+              className="text-gray-400 hover:text-white transition-colors p-1"
+              aria-label="Skip tour"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <p className="text-gray-300 text-sm leading-relaxed mb-4">
+            {step.content}
+          </p>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between">
+            <div className="flex gap-1">
+              {Array.from({ length: totalSteps }, (_, i) => (
+                <div
+                  key={i}
+                  className={`w-2 h-2 rounded-full transition-colors ${
+                    i === currentStep
+                      ? "bg-[#00c6ff]"
+                      : i < currentStep
+                      ? "bg-[#00c6ff]/60"
+                      : "bg-gray-600"
+                  }`}
+                />
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={onSkip}
+                className="px-3 py-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                Skip Tour
+              </button>
+              <button
+                onClick={onNext}
+                className="px-4 py-1.5 bg-[#00c6ff] hover:bg-[#0099cc] text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-1"
+              >
+                {currentStep === totalSteps - 1 ? "Finish" : "Next"}
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </>
+    );
+  };
+
+  // ============================================================================
+  // TOUR STEPS CONFIGURATION FOR CRAFTING CALCULATOR
+  // ============================================================================
+
+  const CALCULATOR_TOUR_STEPS: TooltipStep[] = [
+    {
+      id: "calculator-header",
+      target: "calculator-header",
+      title: "Welcome to the Crafting Calculator!",
+      content:
+        "This powerful tool helps you calculate exactly what resources and components you need for any crafting project in ELAN Life.",
+      placement: "bottom",
+    },
+    {
+      id: "show-all-toggle",
+      target: "show-all-toggle",
+      title: "Blueprint Filter Toggle",
+      content:
+        "Toggle this ON to see all available blueprints, or keep it OFF to only see blueprints you own (set in your profile).",
+      placement: "bottom",
+    },
+    {
+      id: "category-selector",
+      target: "category-selector",
+      title: "Category Selection",
+      content:
+        "Start by choosing a category like Weapons, Vehicles, or Components. This filters the available items.",
+      placement: "bottom",
+    },
+    {
+      id: "item-selector",
+      target: "item-selector",
+      title: "Item Selection",
+      content:
+        "Pick the specific item you want to craft. You can see the required crafting level here too!",
+      placement: "bottom",
+    },
+    {
+      id: "quantity-input",
+      target: "quantity-input",
+      title: "Set Quantity",
+      content:
+        "Enter how many of this item you want to craft. The calculator will multiply all requirements automatically.",
+      placement: "left",
+    },
+    {
+      id: "storage-options",
+      target: "storage-options",
+      title: "Transport Planning",
+      content:
+        "Select your vehicles and backpack to calculate how many material runs you'll need to gather resources.",
+      placement: "top",
+    },
+    {
+      id: "calculate-button",
+      target: "calculate-button",
+      title: "Calculate Materials",
+      content:
+        "Click here to see all required resources, components, and material run calculations for your selected item.",
+      placement: "top",
+    },
+    {
+      id: "kit-system",
+      target: "kit-system",
+      title: "Kit Building System",
+      content:
+        "Add multiple items to your kit to calculate materials for entire projects! Perfect for planning major crafting sessions.",
+      placement: "left",
+    },
+  ];
 
   // Type definitions
   interface ItemsByCategory {
@@ -137,6 +417,9 @@ export default function CalculatorPage() {
     [itemName: string]: number;
   }
 
+  // ============================================================================
+  // !! ADD NEW ITEM DATA HERE
+  // ============================================================================
   // Game data
   const itemsByCategory: ItemsByCategory = {
     Weapons: [
@@ -281,6 +564,8 @@ export default function CalculatorPage() {
       "Knit Cap",
       "Kolobok Backpack",
       "KZS Pants",
+      "Leather Jacket (old)",
+      "Lumber Jacket - All Variants",
       "M70 Backpack",
       "M70 Cap",
       "M70 Parka",
@@ -297,6 +582,7 @@ export default function CalculatorPage() {
       "Paper Bag",
       "Polo",
       "Pullover",
+      "Raincoat",
       "Robe",
       "Runner Shoe",
       "Sneaker",
@@ -307,6 +593,8 @@ export default function CalculatorPage() {
       "Suit Pants",
       "Sweater",
       "Sweat Pants",
+      "Track Jacket",
+      "Track Pants",
       "TShirt",
       "US Combat Boots",
       "Veshmeshok Backpack",
@@ -340,6 +628,9 @@ export default function CalculatorPage() {
     ],
   };
 
+  // ============================================================================
+  // !! ADD NEW ITEM DATA HERE
+  // ============================================================================
   const craftingLevels: CraftingLevels = {
     // ========== WEAPONS ==========
     "AK-74": 8,
@@ -461,13 +752,13 @@ export default function CalculatorPage() {
     "BDU Blouse": 2,
     "BDU Blouse - Rolled-up": 2,
     "BDU Trousers": 2,
-    "Beanie": 4,
-    "Beret": 3,
+    Beanie: 4,
+    Beret: 3,
     Boonie: 4,
     "Cap - All Variants": 2,
     "Cargo Pants": 3,
     "Cargo Pants (Colored)": 4,
-    "Cardigan": 3,
+    Cardigan: 3,
     "Classic Shoe": 4,
     "Cotton Shirt": 3,
     "CWU-27 Pilot Coveralls": 6,
@@ -477,7 +768,7 @@ export default function CalculatorPage() {
     "Flat Cap": 3,
     "Half Mask": 3,
     "Hard Hat": 4,
-    "Hoodie": 4,
+    Hoodie: 4,
     "Hunting Vest": 3,
     "IIFS Large Combat Field Pack": 7,
     Jacket: 4,
@@ -488,6 +779,8 @@ export default function CalculatorPage() {
     "Knit Cap": 1,
     "Kolobok Backpack": 2,
     "KZS Pants": 3,
+    "Leather Jacket (old)": 4,
+    "Lumber Jacket - All Variants": 4,
     "M70 Backpack": 5,
     "M70 Cap": 3,
     "M70 Parka": 3,
@@ -504,6 +797,7 @@ export default function CalculatorPage() {
     "Paper Bag": 5,
     Polo: 4,
     Pullover: 4,
+    Raincoat: 4,
     Robe: 5,
     "Runner Shoe": 4,
     Sneaker: 4,
@@ -514,7 +808,9 @@ export default function CalculatorPage() {
     "Suit Pants": 7,
     Sweater: 3,
     "Sweat Pants": 4,
-    "TShirt": 4,
+    "Track Jacket": 4,
+    "Track Pants": 4,
+    TShirt: 4,
     "US Combat Boots": 1,
     "Veshmeshok Backpack": 3,
     "Wool Hat": 5,
@@ -555,6 +851,9 @@ export default function CalculatorPage() {
     },
   };
 
+  // ============================================================================
+  // !! ADD NEW ITEM DATA HERE
+  // ============================================================================
   const itemComponents: ItemComponents = {
     Weapons: {
       "AK-74": {
@@ -1224,7 +1523,7 @@ export default function CalculatorPage() {
       "Hard Hat": {
         "Non-HQ": { Cloth: 1 },
       },
-      "Hoodie": {
+      Hoodie: {
         "Non-HQ": { Cloth: 2 },
       },
       "Hunting Vest": {
@@ -1256,6 +1555,12 @@ export default function CalculatorPage() {
       },
       "KZS Pants": {
         "Non-HQ": { Cloth: 2 },
+      },
+      "Leather Jacket (old)": {
+        "Non-HQ": { Cloth: 3 },
+      },
+      "Lumber Jacket - All Variants": {
+        "Non-HQ": { Cloth: 3 },
       },
       "M70 Backpack": {
         "Non-HQ": { Cloth: 2 },
@@ -1305,6 +1610,9 @@ export default function CalculatorPage() {
       Pullover: {
         "Non-HQ": { Cloth: 1 },
       },
+      Raincoat: {
+        "Non-HQ": { Cloth: 1 },
+      },
       Robe: {
         "Non-HQ": { Cloth: 7 },
       },
@@ -1334,6 +1642,12 @@ export default function CalculatorPage() {
       },
       "Sweat Pants": {
         "Non-HQ": { Cloth: 1 },
+      },
+      "Track Jacket": {
+        "Non-HQ": { Cloth: 2 },
+      },
+      "Track Pants": {
+        "Non-HQ": { Cloth: 2 },
       },
       TShirt: {
         "Non-HQ": { Cloth: 1 },
@@ -1479,11 +1793,11 @@ export default function CalculatorPage() {
 
   // Define which resources need fuel trucks (liquid resources)
   const fuelTruckResources = ["Polyester", "Petrol"];
-  
+
   // Define which resources need cargo trucks (solid resources)
   const cargoTruckResources = [
     "Fabric",
-    "Iron Ingot", 
+    "Iron Ingot",
     "Copper Ingot",
     "Glass",
     "Component",
@@ -1496,7 +1810,11 @@ export default function CalculatorPage() {
   // Helper function to check if vehicle is a fuel truck
   const isFuelTruck = (vehicleName: string): boolean => {
     const vehicleData = storageOptions.vehicles[vehicleName];
-    return Boolean(vehicleData && typeof vehicleData === 'object' && 'canisters' in vehicleData);
+    return Boolean(
+      vehicleData &&
+        typeof vehicleData === "object" &&
+        "canisters" in vehicleData
+    );
   };
 
   // Helper function to get fuel trucks
@@ -1509,6 +1827,9 @@ export default function CalculatorPage() {
     return Object.keys(storageOptions.vehicles); // All vehicles can carry solid resources
   };
 
+  // ============================================================================
+  // !! ADD NEW ITEM DATA HERE
+  // ============================================================================
   // Crafting times in seconds
   const craftingTimes: CraftingTimes = {
     // Base Components (seconds per unit)
@@ -1673,7 +1994,7 @@ export default function CalculatorPage() {
     "Flat Cap": 20,
     "Half Mask": 20,
     "Hard Hat": 20,
-    "Hoodie": 20,
+    Hoodie: 20,
     "Hunting Vest": 20,
     "IIFS Large Combat Field Pack": 20,
     Jacket: 20,
@@ -1684,6 +2005,8 @@ export default function CalculatorPage() {
     "Knit Cap": 20,
     "Kolobok Backpack": 20,
     "KZS Pants": 20,
+    "Leather Jacket (old)": 20,
+    "Lumber Jacket - All Variants": 20,
     "M70 Backpack": 20,
     "M70 Cap": 20,
     "M70 Parka": 20,
@@ -1700,6 +2023,7 @@ export default function CalculatorPage() {
     "Paper Bag": 20,
     Polo: 20,
     Pullover: 20,
+    Raincoat: 20,
     Robe: 20,
     "Runner Shoe": 20,
     Sneaker: 20,
@@ -1710,6 +2034,8 @@ export default function CalculatorPage() {
     "Suit Pants": 20,
     Sweater: 20,
     "Sweat Pants": 20,
+    "Track Jacket": 20,
+    "Track Pants": 20,
     TShirt: 20,
     "US Combat Boots": 20,
     "Veshmeshok Backpack": 20,
@@ -1720,6 +2046,17 @@ export default function CalculatorPage() {
   useEffect(() => {
     if (!loading && !hasAccess) {
       window.location.href = "/";
+    }
+  }, [hasAccess, loading]);
+
+  // Onboarding initialization
+  useEffect(() => {
+    const onboardingCompleted = localStorage.getItem(ONBOARDING_COMPLETED_KEY);
+    if (!onboardingCompleted && hasAccess && !loading) {
+      const timer = setTimeout(() => {
+        setShowOnboarding(true);
+      }, 1500);
+      return () => clearTimeout(timer);
     }
   }, [hasAccess, loading]);
 
@@ -1734,7 +2071,10 @@ export default function CalculatorPage() {
       const allItems = itemsByCategory[selectedCategory] || [];
 
       // Always show Components and HQ Components regardless of toggle setting
-      if (selectedCategory === "Components" || selectedCategory === "HQ Components") {
+      if (
+        selectedCategory === "Components" ||
+        selectedCategory === "HQ Components"
+      ) {
         setAvailableItems(allItems);
         return;
       }
@@ -1794,7 +2134,14 @@ export default function CalculatorPage() {
     if (selectedItem && selectedCategory !== "--") {
       calculateResources();
     }
-  }, [selectedItem, selectedCategory, quantity, selectedFuelVehicle, selectedCargoVehicle, selectedBackpack]);
+  }, [
+    selectedItem,
+    selectedCategory,
+    quantity,
+    selectedFuelVehicle,
+    selectedCargoVehicle,
+    selectedBackpack,
+  ]);
 
   // Auto-calculate kit when vehicles change
   useEffect(() => {
@@ -1804,6 +2151,21 @@ export default function CalculatorPage() {
   }, [selectedFuelVehicle, selectedCargoVehicle, selectedBackpack]);
 
   // Helper functions
+  // Onboarding handlers
+  const handleNextTourStep = () => {
+    if (currentTourStep < CALCULATOR_TOUR_STEPS.length - 1) {
+      setCurrentTourStep(currentTourStep + 1);
+    } else {
+      handleSkipTour();
+    }
+  };
+
+  const handleSkipTour = () => {
+    setShowOnboarding(false);
+    setCurrentTourStep(0);
+    localStorage.setItem(ONBOARDING_COMPLETED_KEY, "true");
+  };
+
   const calculateCraftingTime = (
     resources: { [key: string]: number },
     components: { [key: string]: number },
@@ -1919,10 +2281,12 @@ export default function CalculatorPage() {
   };
 
   // Helper function to analyze transport requirements
-  const analyzeTransportRequirements = (totalResources: { [key: string]: number }) => {
+  const analyzeTransportRequirements = (totalResources: {
+    [key: string]: number;
+  }) => {
     const fuelResources: string[] = [];
     const cargoResources: string[] = [];
-    
+
     for (const [resource, amount] of Object.entries(totalResources)) {
       if (resourcesList.includes(resource)) {
         if (fuelTruckResources.includes(resource)) {
@@ -1932,7 +2296,7 @@ export default function CalculatorPage() {
         }
       }
     }
-    
+
     return {
       needsFuelTruck: fuelResources.length > 0,
       needsCargoTruck: cargoResources.length > 0,
@@ -1943,7 +2307,7 @@ export default function CalculatorPage() {
 
   const calculateMaterialRuns = (totalResources: { [key: string]: number }) => {
     const transportRequirements = analyzeTransportRequirements(totalResources);
-    
+
     let fuelTruckRuns = undefined;
     let cargoTruckRuns = undefined;
 
@@ -1951,7 +2315,11 @@ export default function CalculatorPage() {
     if (transportRequirements.needsFuelTruck) {
       let fuelVehicleCap = 0;
       const fuelVehicleData = storageOptions.vehicles[selectedFuelVehicle];
-      if (fuelVehicleData !== undefined && typeof fuelVehicleData === 'object' && 'canisters' in fuelVehicleData) {
+      if (
+        fuelVehicleData !== undefined &&
+        typeof fuelVehicleData === "object" &&
+        "canisters" in fuelVehicleData
+      ) {
         fuelVehicleCap = fuelVehicleData.canisters;
       }
 
@@ -1963,8 +2331,12 @@ export default function CalculatorPage() {
       const fuelRunDetails: { [key: string]: number } = {};
 
       for (const [resource, amount] of Object.entries(totalResources)) {
-        if (fuelTruckResources.includes(resource) && resourcesList.includes(resource)) {
-          const runsNeeded = totalFuelCap > 0 ? Math.ceil(amount / totalFuelCap) : 0;
+        if (
+          fuelTruckResources.includes(resource) &&
+          resourcesList.includes(resource)
+        ) {
+          const runsNeeded =
+            totalFuelCap > 0 ? Math.ceil(amount / totalFuelCap) : 0;
           fuelRunDetails[resource] = runsNeeded;
           totalFuelResources += amount;
           totalFuelRuns += runsNeeded;
@@ -1985,12 +2357,15 @@ export default function CalculatorPage() {
     if (transportRequirements.needsCargoTruck) {
       let cargoVehicleCap = 0;
       const cargoVehicleData = storageOptions.vehicles[selectedCargoVehicle];
-      
+
       // Handle both fuel trucks (which can carry solid resources) and regular cargo vehicles
       if (cargoVehicleData !== undefined) {
-        if (typeof cargoVehicleData === 'number') {
+        if (typeof cargoVehicleData === "number") {
           cargoVehicleCap = cargoVehicleData;
-        } else if (typeof cargoVehicleData === 'object' && 'canisters' in cargoVehicleData) {
+        } else if (
+          typeof cargoVehicleData === "object" &&
+          "canisters" in cargoVehicleData
+        ) {
           // Fuel trucks can carry the same amount of solid resources as liquid resources
           cargoVehicleCap = cargoVehicleData.canisters;
         }
@@ -2004,8 +2379,12 @@ export default function CalculatorPage() {
       const cargoRunDetails: { [key: string]: number } = {};
 
       for (const [resource, amount] of Object.entries(totalResources)) {
-        if (cargoTruckResources.includes(resource) && resourcesList.includes(resource)) {
-          const runsNeeded = totalCargoCap > 0 ? Math.ceil(amount / totalCargoCap) : 0;
+        if (
+          cargoTruckResources.includes(resource) &&
+          resourcesList.includes(resource)
+        ) {
+          const runsNeeded =
+            totalCargoCap > 0 ? Math.ceil(amount / totalCargoCap) : 0;
           cargoRunDetails[resource] = runsNeeded;
           totalCargoResources += amount;
           totalCargoRuns += runsNeeded;
@@ -2093,15 +2472,20 @@ export default function CalculatorPage() {
 
         if (isComponent) {
           // Add to components and break down into base resources
-          totalComponents[resource] = (totalComponents[resource] || 0) + resourceQuantity;
-          
-          const { resources: resMap } = collectBaseResources(resource, resourceQuantity);
+          totalComponents[resource] =
+            (totalComponents[resource] || 0) + resourceQuantity;
+
+          const { resources: resMap } = collectBaseResources(
+            resource,
+            resourceQuantity
+          );
           for (const [res, qty] of Object.entries(resMap)) {
             totalResources[res] = (totalResources[res] || 0) + qty;
           }
         } else {
           // It's a true raw resource
-          totalResources[resource] = (totalResources[resource] || 0) + resourceQuantity;
+          totalResources[resource] =
+            (totalResources[resource] || 0) + resourceQuantity;
         }
       }
     }
@@ -2251,15 +2635,20 @@ export default function CalculatorPage() {
 
           if (isComponent) {
             // Add to components and break down into base resources
-            totalComponents[resource] = (totalComponents[resource] || 0) + resourceQuantity;
-            
-            const { resources: resMap } = collectBaseResources(resource, resourceQuantity);
+            totalComponents[resource] =
+              (totalComponents[resource] || 0) + resourceQuantity;
+
+            const { resources: resMap } = collectBaseResources(
+              resource,
+              resourceQuantity
+            );
             for (const [res, qty] of Object.entries(resMap)) {
               totalResources[res] = (totalResources[res] || 0) + qty;
             }
           } else {
             // It's a true raw resource
-            totalResources[resource] = (totalResources[resource] || 0) + resourceQuantity;
+            totalResources[resource] =
+              (totalResources[resource] || 0) + resourceQuantity;
           }
         }
       }
@@ -2331,283 +2720,307 @@ export default function CalculatorPage() {
 
   // Check if transport requirements analysis is needed
   const transportRequirements = results?.materialRuns?.transportRequirements;
-  const needsBothVehicles = transportRequirements?.needsFuelTruck && transportRequirements?.needsCargoTruck;
-  const needsOnlyFuel = transportRequirements?.needsFuelTruck && !transportRequirements?.needsCargoTruck;
-  const needsOnlyCargo = !transportRequirements?.needsFuelTruck && transportRequirements?.needsCargoTruck;
+  const needsBothVehicles =
+    transportRequirements?.needsFuelTruck &&
+    transportRequirements?.needsCargoTruck;
+  const needsOnlyFuel =
+    transportRequirements?.needsFuelTruck &&
+    !transportRequirements?.needsCargoTruck;
+  const needsOnlyCargo =
+    !transportRequirements?.needsFuelTruck &&
+    transportRequirements?.needsCargoTruck;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background-primary via-background-secondary to-background-primary">
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-4xl mx-auto">
-        {/* App Container - Mobile optimized padding */}
-        <div className="bg-background-secondary/80 backdrop-blur-lg border border-white/5 rounded-2xl p-4 sm:p-6 lg:p-8 shadow-2xl">
-          {/* Title Bar - Mobile optimized typography */}
-          <div className="flex justify-between items-center mb-6 sm:mb-8 flex-wrap gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-primary-500 flex items-center flex-wrap">
-              Crafting Calculator
-              <span className="ml-2 text-xs bg-primary-500 text-black px-1.5 py-0.5 rounded font-bold">
-                v2
-              </span>
-            </h1>
-          </div>
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          {/* App Container - Mobile optimized padding */}
+          <div className="bg-background-secondary/80 backdrop-blur-lg border border-white/5 rounded-2xl p-4 sm:p-6 lg:p-8 shadow-2xl">
+            {/* Title Bar - Mobile optimized typography */}
+            <div
+              className="flex justify-between items-center mb-6 sm:mb-8 flex-wrap gap-4"
+              data-tour="calculator-header"
+            >
+              <h1 className="text-2xl sm:text-3xl font-bold text-primary-500 flex items-center flex-wrap">
+                Crafting Calculator
+                <span className="ml-2 text-xs bg-primary-500 text-black px-1.5 py-0.5 rounded font-bold">
+                  v2
+                </span>
+              </h1>
+            </div>
 
             {/* Form Section - Mobile optimized spacing */}
-          <div className="space-y-4 sm:space-y-6">
-            {/* Show All Blueprints Toggle */}
-            <div className="flex items-center justify-between">
-              <label
-                htmlFor="showAllToggle"
-                className="text-white/90 font-medium"
+            <div className="space-y-4 sm:space-y-6">
+              {/* Show All Blueprints Toggle */}
+              <div
+                className="flex items-center justify-between"
+                data-tour="show-all-toggle"
               >
-                Show All Blueprints:
-              </label>
-              <label className="relative inline-block w-12 h-6">
-                <input
-                  type="checkbox"
-                  id="showAllToggle"
-                  checked={showAllBlueprints}
-                  onChange={(e) => setShowAllBlueprints(e.target.checked)}
-                  className="opacity-0 w-0 h-0"
-                />
-                <span
-                  className={`absolute cursor-pointer top-0 left-0 right-0 bottom-0 rounded-full transition-all duration-300 ${
-                    showAllBlueprints ? "bg-primary-500" : "bg-gray-600"
-                  }`}
+                <label
+                  htmlFor="showAllToggle"
+                  className="text-white/90 font-medium"
                 >
+                  Show All Blueprints:
+                </label>
+                <label className="relative inline-block w-12 h-6">
+                  <input
+                    type="checkbox"
+                    id="showAllToggle"
+                    checked={showAllBlueprints}
+                    onChange={(e) => setShowAllBlueprints(e.target.checked)}
+                    className="opacity-0 w-0 h-0"
+                  />
                   <span
-                    className={`absolute h-4 w-4 rounded-full bg-white transition-all duration-300 top-1 ${
-                      showAllBlueprints ? "left-7" : "left-1"
+                    className={`absolute cursor-pointer top-0 left-0 right-0 bottom-0 rounded-full transition-all duration-300 ${
+                      showAllBlueprints ? "bg-primary-500" : "bg-gray-600"
                     }`}
-                  ></span>
-                </span>
-              </label>
-            </div>
+                  >
+                    <span
+                      className={`absolute h-4 w-4 rounded-full bg-white transition-all duration-300 top-1 ${
+                        showAllBlueprints ? "left-7" : "left-1"
+                      }`}
+                    ></span>
+                  </span>
+                </label>
+              </div>
 
               {/* Category Selection - Mobile optimized input */}
-            <div>
-              <label
-                htmlFor="categories"
-                className="block text-white/90 font-medium mb-2"
-              >
-                Select Category:
-              </label>
-              <select
-                id="categories"
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none text-base"
-              >
-                <option value="--">--</option>
-                {Object.keys(itemsByCategory).map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Item Selection - Mobile responsive layout */}
-            <div>
-              <label
-                htmlFor="items"
-                className="block text-white/90 font-medium mb-2"
-              >
-                Select Item:
-              </label>
-              <div className="flex flex-col md:flex-row gap-4">
-                <select
-                  id="items"
-                  value={selectedItem}
-                  onChange={(e) => setSelectedItem(e.target.value)}
-                  disabled={selectedCategory === "--"}
-                  className="flex-1 min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none disabled:opacity-50 text-base"
+              <div data-tour="category-selector">
+                <label
+                  htmlFor="categories"
+                  className="block text-white/90 font-medium mb-2"
                 >
-                  <option value="">Choose an item...</option>
-                  {availableItems.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
+                  Select Category:
+                </label>
+                <select
+                  id="categories"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="w-full min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none text-base"
+                >
+                  <option value="--">--</option>
+                  {Object.keys(itemsByCategory).map((category) => (
+                    <option key={category} value={category}>
+                      {category}
                     </option>
                   ))}
                 </select>
-                <div className="flex items-center justify-center md:justify-start md:px-4 py-2 md:py-0 font-semibold text-white/90">
-                  Crafting Level:{" "}
-                  {selectedItem
-                    ? craftingLevels[selectedItem] ?? "N/A"
-                    : "N/A"}
-                </div>
               </div>
-            </div>
 
-              {/* Quantity - Mobile optimized input */}
-            <div>
-              <label
-                htmlFor="quantity"
-                className="block text-white/90 font-medium mb-2"
-              >
-                Quantity:
-              </label>
-              <input
-                type="number"
-                id="quantity"
-                min="1"
-                value={quantity}
-                onChange={(e) =>
-                  setQuantity(Math.max(1, parseInt(e.target.value) || 1))
-                }
-                className="w-full min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none text-base"
-              />
-            </div>
-
-              {/* Transport Kit - Mobile responsive grid */}
-            <div>
-              <h3 className="text-lg sm:text-xl text-primary-500 font-semibold mb-4">
-                Your Transport Kit
-              </h3>
-
-              {/* Transport Requirements Warning */}
-              {transportRequirements && (
-                <div className="mb-4 p-4 bg-blue-500/20 border border-blue-500/50 rounded-lg">
-                  <div className="text-white font-semibold mb-2">Transport Requirements:</div>
-                  {needsBothVehicles && (
-                    <div className="text-yellow-300">
-                      ⚠️ Multiple vehicle types required for this selection
-                    </div>
-                  )}
-                  {transportRequirements.needsFuelTruck && (
-                    <div className="text-blue-300">
-                      🛢️ Fuel Truck needed for: {transportRequirements.fuelResources.join(", ")}
-                    </div>
-                  )}
-                  {transportRequirements.needsCargoTruck && (
-                    <div className="text-green-300">
-                      📦 Cargo Vehicle needed for: {transportRequirements.cargoResources.join(", ")}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                {/* Fuel Vehicle Selection */}
-                <div>
-                  <label
-                    htmlFor="fuelVehicleSelect"
-                    className="block text-white/90 font-medium mb-2"
-                  >
-                    Select Fuel Truck:
-                    {transportRequirements?.needsFuelTruck && (
-                      <span className="text-blue-300 ml-1">*Required</span>
-                    )}
-                  </label>
+              {/* Item Selection - Mobile responsive layout */}
+              <div data-tour="item-selector">
+                <label
+                  htmlFor="items"
+                  className="block text-white/90 font-medium mb-2"
+                >
+                  Select Item:
+                </label>
+                <div className="flex flex-col md:flex-row gap-4">
                   <select
-                    id="fuelVehicleSelect"
-                    value={selectedFuelVehicle}
-                    onChange={(e) => setSelectedFuelVehicle(e.target.value)}
-                    disabled={!transportRequirements?.needsFuelTruck}
-                    className={`w-full min-h-[44px] p-3 bg-background-tertiary border rounded-lg text-white focus:outline-none text-base ${
-                      transportRequirements?.needsFuelTruck 
-                        ? "border-blue-500 focus:border-blue-400" 
-                        : "border-white/20 opacity-50"
-                    }`}
+                    id="items"
+                    value={selectedItem}
+                    onChange={(e) => setSelectedItem(e.target.value)}
+                    disabled={selectedCategory === "--"}
+                    className="flex-1 min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none disabled:opacity-50 text-base"
                   >
-                    <option value="">-- Select Fuel Truck --</option>
-                    {getFuelTrucks().map((vehicle) => {
-                      const vehicleData = storageOptions.vehicles[vehicle];
-                      const canisters = typeof vehicleData === 'object' && 'canisters' in vehicleData 
-                        ? vehicleData.canisters 
-                        : 0;
-                      return (
-                        <option key={vehicle} value={vehicle}>
-                          {vehicle} ({canisters} canisters)
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                {/* Cargo Vehicle Selection */}
-                <div>
-                  <label
-                    htmlFor="cargoVehicleSelect"
-                    className="block text-white/90 font-medium mb-2"
-                  >
-                    Select Cargo Vehicle:
-                    {transportRequirements?.needsCargoTruck && (
-                      <span className="text-green-300 ml-1">*Required</span>
-                    )}
-                  </label>
-                  <select
-                    id="cargoVehicleSelect"
-                    value={selectedCargoVehicle}
-                    onChange={(e) => setSelectedCargoVehicle(e.target.value)}
-                    disabled={!transportRequirements?.needsCargoTruck}
-                    className={`w-full min-h-[44px] p-3 bg-background-tertiary border rounded-lg text-white focus:outline-none text-base ${
-                      transportRequirements?.needsCargoTruck 
-                        ? "border-green-500 focus:border-green-400" 
-                        : "border-white/20 opacity-50"
-                    }`}
-                  >
-                    <option value="">-- Select Cargo Vehicle --</option>
-                    {getCargoVehicles().map((vehicle) => {
-                      const vehicleData = storageOptions.vehicles[vehicle];
-                      let storage = 0;
-                      
-                      if (typeof vehicleData === 'number') {
-                        storage = vehicleData;
-                      } else if (typeof vehicleData === 'object' && 'canisters' in vehicleData) {
-                        // Fuel trucks can carry the same amount of solid resources as liquid resources
-                        storage = vehicleData.canisters;
-                      }
-                      
-                      return (
-                        <option key={vehicle} value={vehicle}>
-                          {vehicle} ({storage} storage)
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                {/* Backpack Selection - spans both columns */}
-                <div className="lg:col-span-2">
-                  <label
-                    htmlFor="backpackSelect"
-                    className="block text-white/90 font-medium mb-2"
-                  >
-                    Select Backpack:
-                  </label>
-                  <select
-                    id="backpackSelect"
-                    value={selectedBackpack}
-                    onChange={(e) => setSelectedBackpack(e.target.value)}
-                    className="w-full min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none text-base"
-                  >
-                    <option value="">-- Select Backpack --</option>
-                    {Object.keys(storageOptions.backpacks).map((backpack) => (
-                      <option key={backpack} value={backpack}>
-                        {backpack} ({storageOptions.backpacks[backpack]} storage)
+                    <option value="">Choose an item...</option>
+                    {availableItems.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
                       </option>
                     ))}
                   </select>
+                  <div className="flex items-center justify-center md:justify-start md:px-4 py-2 md:py-0 font-semibold text-white/90">
+                    Crafting Level:{" "}
+                    {selectedItem
+                      ? craftingLevels[selectedItem] ?? "N/A"
+                      : "N/A"}
+                  </div>
                 </div>
               </div>
-            </div>
+
+              {/* Quantity - Mobile optimized input */}
+              <div data-tour="quantity-input">
+                <label
+                  htmlFor="quantity"
+                  className="block text-white/90 font-medium mb-2"
+                >
+                  Quantity:
+                </label>
+                <input
+                  type="number"
+                  id="quantity"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) =>
+                    setQuantity(Math.max(1, parseInt(e.target.value) || 1))
+                  }
+                  className="w-full min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none text-base"
+                />
+              </div>
+
+              {/* Transport Kit - Mobile responsive grid */}
+              <div data-tour="storage-options">
+                <h3 className="text-lg sm:text-xl text-primary-500 font-semibold mb-4">
+                  Your Transport Kit
+                </h3>
+
+                {/* Transport Requirements Warning */}
+                {transportRequirements && (
+                  <div className="mb-4 p-4 bg-blue-500/20 border border-blue-500/50 rounded-lg">
+                    <div className="text-white font-semibold mb-2">
+                      Transport Requirements:
+                    </div>
+                    {needsBothVehicles && (
+                      <div className="text-yellow-300">
+                        ⚠️ Multiple vehicle types required for this selection
+                      </div>
+                    )}
+                    {transportRequirements.needsFuelTruck && (
+                      <div className="text-blue-300">
+                        🛢️ Fuel Truck needed for:{" "}
+                        {transportRequirements.fuelResources.join(", ")}
+                      </div>
+                    )}
+                    {transportRequirements.needsCargoTruck && (
+                      <div className="text-green-300">
+                        📦 Cargo Vehicle needed for:{" "}
+                        {transportRequirements.cargoResources.join(", ")}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                  {/* Fuel Vehicle Selection */}
+                  <div>
+                    <label
+                      htmlFor="fuelVehicleSelect"
+                      className="block text-white/90 font-medium mb-2"
+                    >
+                      Select Fuel Truck:
+                      {transportRequirements?.needsFuelTruck && (
+                        <span className="text-blue-300 ml-1">*Required</span>
+                      )}
+                    </label>
+                    <select
+                      id="fuelVehicleSelect"
+                      value={selectedFuelVehicle}
+                      onChange={(e) => setSelectedFuelVehicle(e.target.value)}
+                      disabled={!transportRequirements?.needsFuelTruck}
+                      className={`w-full min-h-[44px] p-3 bg-background-tertiary border rounded-lg text-white focus:outline-none text-base ${
+                        transportRequirements?.needsFuelTruck
+                          ? "border-blue-500 focus:border-blue-400"
+                          : "border-white/20 opacity-50"
+                      }`}
+                    >
+                      <option value="">-- Select Fuel Truck --</option>
+                      {getFuelTrucks().map((vehicle) => {
+                        const vehicleData = storageOptions.vehicles[vehicle];
+                        const canisters =
+                          typeof vehicleData === "object" &&
+                          "canisters" in vehicleData
+                            ? vehicleData.canisters
+                            : 0;
+                        return (
+                          <option key={vehicle} value={vehicle}>
+                            {vehicle} ({canisters} canisters)
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  {/* Cargo Vehicle Selection */}
+                  <div>
+                    <label
+                      htmlFor="cargoVehicleSelect"
+                      className="block text-white/90 font-medium mb-2"
+                    >
+                      Select Cargo Vehicle:
+                      {transportRequirements?.needsCargoTruck && (
+                        <span className="text-green-300 ml-1">*Required</span>
+                      )}
+                    </label>
+                    <select
+                      id="cargoVehicleSelect"
+                      value={selectedCargoVehicle}
+                      onChange={(e) => setSelectedCargoVehicle(e.target.value)}
+                      disabled={!transportRequirements?.needsCargoTruck}
+                      className={`w-full min-h-[44px] p-3 bg-background-tertiary border rounded-lg text-white focus:outline-none text-base ${
+                        transportRequirements?.needsCargoTruck
+                          ? "border-green-500 focus:border-green-400"
+                          : "border-white/20 opacity-50"
+                      }`}
+                    >
+                      <option value="">-- Select Cargo Vehicle --</option>
+                      {getCargoVehicles().map((vehicle) => {
+                        const vehicleData = storageOptions.vehicles[vehicle];
+                        let storage = 0;
+
+                        if (typeof vehicleData === "number") {
+                          storage = vehicleData;
+                        } else if (
+                          typeof vehicleData === "object" &&
+                          "canisters" in vehicleData
+                        ) {
+                          // Fuel trucks can carry the same amount of solid resources as liquid resources
+                          storage = vehicleData.canisters;
+                        }
+
+                        return (
+                          <option key={vehicle} value={vehicle}>
+                            {vehicle} ({storage} storage)
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  {/* Backpack Selection - spans both columns */}
+                  <div className="lg:col-span-2">
+                    <label
+                      htmlFor="backpackSelect"
+                      className="block text-white/90 font-medium mb-2"
+                    >
+                      Select Backpack:
+                    </label>
+                    <select
+                      id="backpackSelect"
+                      value={selectedBackpack}
+                      onChange={(e) => setSelectedBackpack(e.target.value)}
+                      className="w-full min-h-[44px] p-3 bg-background-tertiary border border-white/20 rounded-lg text-white focus:border-primary-500 focus:outline-none text-base"
+                    >
+                      <option value="">-- Select Backpack --</option>
+                      {Object.keys(storageOptions.backpacks).map((backpack) => (
+                        <option key={backpack} value={backpack}>
+                          {backpack} ({storageOptions.backpacks[backpack]}{" "}
+                          storage)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
 
               {/* Action Buttons - Mobile optimized sizing */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <button
-                onClick={calculateResources}
-                className="w-full min-h-[44px] px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 transition-all duration-200 text-base"
-              >
-                Calculate Materials
-              </button>
-              <button
-                onClick={addToKit}
-                className="w-full min-h-[44px] px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 transition-all duration-200 text-base"
-              >
-                Add to Kit
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button
+                  onClick={calculateResources}
+                  className="w-full min-h-[44px] px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 transition-all duration-200 text-base"
+                  data-tour="calculate-button"
+                >
+                  Calculate Materials
+                </button>
+                <button
+                  onClick={addToKit}
+                  className="w-full min-h-[44px] px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 transition-all duration-200 text-base"
+                  data-tour="kit-system"
+                >
+                  Add to Kit
+                </button>
+              </div>
             </div>
-          </div>
 
             {/* Results */}
             {results && (
@@ -2679,7 +3092,7 @@ export default function CalculatorPage() {
                     <h2 className="text-xl font-semibold text-primary-500 border-b border-gray-600 pb-2 mb-4">
                       Transport Operations
                     </h2>
-                    
+
                     {/* Fuel Truck Operations */}
                     {results.materialRuns.fuelTruckRuns && (
                       <div className="mb-4 p-4 bg-blue-500/20 border border-blue-500/50 rounded-lg">
@@ -2692,20 +3105,31 @@ export default function CalculatorPage() {
                           </p>
                         ) : (
                           <div>
-                            {Object.entries(results.materialRuns.fuelTruckRuns.runDetails).map(
-                              ([resource, runs]) => (
-                                <div key={resource} className="text-white/90">
-                                  {resource}: {runs} run(s)
-                                </div>
-                              )
-                            )}
+                            {Object.entries(
+                              results.materialRuns.fuelTruckRuns.runDetails
+                            ).map(([resource, runs]) => (
+                              <div key={resource} className="text-white/90">
+                                {resource}: {runs} run(s)
+                              </div>
+                            ))}
                             <div className="mt-2 font-semibold text-blue-200">
-                              Total: <strong>{results.materialRuns.fuelTruckRuns.totalRuns}</strong> fuel truck run(s) 
-                              for <strong>{results.materialRuns.fuelTruckRuns.totalResources}</strong> liquid resources
-                              using <strong>{results.materialRuns.fuelTruckRuns.vehicle}</strong>
-                              {results.materialRuns.fuelTruckRuns.backpack && 
-                                ` + ${results.materialRuns.fuelTruckRuns.backpack}`
-                              }
+                              Total:{" "}
+                              <strong>
+                                {results.materialRuns.fuelTruckRuns.totalRuns}
+                              </strong>{" "}
+                              fuel truck run(s) for{" "}
+                              <strong>
+                                {
+                                  results.materialRuns.fuelTruckRuns
+                                    .totalResources
+                                }
+                              </strong>{" "}
+                              liquid resources using{" "}
+                              <strong>
+                                {results.materialRuns.fuelTruckRuns.vehicle}
+                              </strong>
+                              {results.materialRuns.fuelTruckRuns.backpack &&
+                                ` + ${results.materialRuns.fuelTruckRuns.backpack}`}
                             </div>
                           </div>
                         )}
@@ -2724,20 +3148,31 @@ export default function CalculatorPage() {
                           </p>
                         ) : (
                           <div>
-                            {Object.entries(results.materialRuns.cargoTruckRuns.runDetails).map(
-                              ([resource, runs]) => (
-                                <div key={resource} className="text-white/90">
-                                  {resource}: {runs} run(s)
-                                </div>
-                              )
-                            )}
+                            {Object.entries(
+                              results.materialRuns.cargoTruckRuns.runDetails
+                            ).map(([resource, runs]) => (
+                              <div key={resource} className="text-white/90">
+                                {resource}: {runs} run(s)
+                              </div>
+                            ))}
                             <div className="mt-2 font-semibold text-green-200">
-                              Total: <strong>{results.materialRuns.cargoTruckRuns.totalRuns}</strong> cargo vehicle run(s) 
-                              for <strong>{results.materialRuns.cargoTruckRuns.totalResources}</strong> solid resources
-                              using <strong>{results.materialRuns.cargoTruckRuns.vehicle}</strong>
-                              {results.materialRuns.cargoTruckRuns.backpack && 
-                                ` + ${results.materialRuns.cargoTruckRuns.backpack}`
-                              }
+                              Total:{" "}
+                              <strong>
+                                {results.materialRuns.cargoTruckRuns.totalRuns}
+                              </strong>{" "}
+                              cargo vehicle run(s) for{" "}
+                              <strong>
+                                {
+                                  results.materialRuns.cargoTruckRuns
+                                    .totalResources
+                                }
+                              </strong>{" "}
+                              solid resources using{" "}
+                              <strong>
+                                {results.materialRuns.cargoTruckRuns.vehicle}
+                              </strong>
+                              {results.materialRuns.cargoTruckRuns.backpack &&
+                                ` + ${results.materialRuns.cargoTruckRuns.backpack}`}
                             </div>
                           </div>
                         )}
@@ -2745,7 +3180,8 @@ export default function CalculatorPage() {
                     )}
 
                     {/* Total Summary */}
-                    {(results.materialRuns.fuelTruckRuns || results.materialRuns.cargoTruckRuns) && (
+                    {(results.materialRuns.fuelTruckRuns ||
+                      results.materialRuns.cargoTruckRuns) && (
                       <div className="mt-4 p-4 bg-primary-500/20 border border-primary-500/50 rounded-lg">
                         <h3 className="text-primary-300 font-semibold mb-2">
                           📋 Total Transport Summary
@@ -2754,21 +3190,27 @@ export default function CalculatorPage() {
                           You will need:{" "}
                           {results.materialRuns.fuelTruckRuns && (
                             <span className="text-blue-300">
-                              {results.materialRuns.fuelTruckRuns.totalRuns} fuel truck run(s)
+                              {results.materialRuns.fuelTruckRuns.totalRuns}{" "}
+                              fuel truck run(s)
                             </span>
                           )}
-                          {results.materialRuns.fuelTruckRuns && results.materialRuns.cargoTruckRuns && (
-                            <span className="text-white"> + </span>
-                          )}
+                          {results.materialRuns.fuelTruckRuns &&
+                            results.materialRuns.cargoTruckRuns && (
+                              <span className="text-white"> + </span>
+                            )}
                           {results.materialRuns.cargoTruckRuns && (
                             <span className="text-green-300">
-                              {results.materialRuns.cargoTruckRuns.totalRuns} cargo vehicle run(s)
+                              {results.materialRuns.cargoTruckRuns.totalRuns}{" "}
+                              cargo vehicle run(s)
                             </span>
                           )}
                           {" = "}
                           <span className="text-primary-300">
-                            {(results.materialRuns.fuelTruckRuns?.totalRuns || 0) + 
-                             (results.materialRuns.cargoTruckRuns?.totalRuns || 0)} total run(s)
+                            {(results.materialRuns.fuelTruckRuns?.totalRuns ||
+                              0) +
+                              (results.materialRuns.cargoTruckRuns?.totalRuns ||
+                                0)}{" "}
+                            total run(s)
                           </span>
                         </div>
                       </div>
@@ -2833,7 +3275,7 @@ export default function CalculatorPage() {
 
             {/* Footer */}
             <div className="text-center mt-8 text-white/50">
-              <p>Updated | June 30, 2025</p>
+              <p>Updated | July 4, 2025</p>
             </div>
           </div>
         </div>
@@ -2912,6 +3354,20 @@ export default function CalculatorPage() {
           🛠️ Build a Kit
         </button>
       )}
+
+      {/* Onboarding Tour */}
+      <AnimatePresence>
+        {showOnboarding && (
+          <OnboardingTooltip
+            step={CALCULATOR_TOUR_STEPS[currentTourStep]}
+            isVisible={showOnboarding}
+            onNext={handleNextTourStep}
+            onSkip={handleSkipTour}
+            currentStep={currentTourStep}
+            totalSteps={CALCULATOR_TOUR_STEPS.length}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

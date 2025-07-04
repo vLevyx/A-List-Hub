@@ -8,12 +8,12 @@ import { X, ChevronRight, BookOpen, Timer, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import { createClient } from "@/lib/supabase/client";
-import { 
-  getDiscordId, 
-  getUsername, 
-  getAvatarUrl, 
-  formatDate, 
-  isSlowConnection 
+import {
+  getDiscordId,
+  getUsername,
+  getAvatarUrl,
+  formatDate,
+  isSlowConnection,
 } from "@/lib/utils";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { withTimeout } from "@/lib/timeout";
@@ -27,7 +27,7 @@ interface TooltipStep {
   target: string;
   title: string;
   content: string;
-  placement: 'top' | 'bottom' | 'left' | 'right';
+  placement: "top" | "bottom" | "left" | "right";
   showNextButton?: boolean;
 }
 
@@ -40,13 +40,13 @@ interface OnboardingTooltipProps {
   totalSteps: number;
 }
 
-const OnboardingTooltip = ({ 
-  step, 
-  isVisible, 
-  onNext, 
-  onSkip, 
-  currentStep, 
-  totalSteps 
+const OnboardingTooltip = ({
+  step,
+  isVisible,
+  onNext,
+  onSkip,
+  currentStep,
+  totalSteps,
 }: OnboardingTooltipProps) => {
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [isPositioned, setIsPositioned] = useState(false);
@@ -63,12 +63,12 @@ const OnboardingTooltip = ({
       };
 
       updatePosition();
-      window.addEventListener('resize', updatePosition);
-      window.addEventListener('scroll', updatePosition);
+      window.addEventListener("resize", updatePosition);
+      window.addEventListener("scroll", updatePosition);
 
       return () => {
-        window.removeEventListener('resize', updatePosition);
-        window.removeEventListener('scroll', updatePosition);
+        window.removeEventListener("resize", updatePosition);
+        window.removeEventListener("scroll", updatePosition);
       };
     }
   }, [isVisible, step.target]);
@@ -84,28 +84,34 @@ const OnboardingTooltip = ({
     let left = 0;
 
     switch (step.placement) {
-      case 'top':
+      case "top":
         top = targetRect.top - tooltipHeight - gap;
-        left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
+        left = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
         break;
-      case 'bottom':
+      case "bottom":
         top = targetRect.bottom + gap;
-        left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
+        left = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
         break;
-      case 'left':
-        top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 2);
+      case "left":
+        top = targetRect.top + targetRect.height / 2 - tooltipHeight / 2;
         left = targetRect.left - tooltipWidth - gap;
         break;
-      case 'right':
-        top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 2);
+      case "right":
+        top = targetRect.top + targetRect.height / 2 - tooltipHeight / 2;
         left = targetRect.right + gap;
         break;
     }
 
     // Ensure tooltip stays within viewport
     const padding = 16;
-    top = Math.max(padding, Math.min(window.innerHeight - tooltipHeight - padding, top));
-    left = Math.max(padding, Math.min(window.innerWidth - tooltipWidth - padding, left));
+    top = Math.max(
+      padding,
+      Math.min(window.innerHeight - tooltipHeight - padding, top)
+    );
+    left = Math.max(
+      padding,
+      Math.min(window.innerWidth - tooltipWidth - padding, left)
+    );
 
     return { top, left };
   }, [targetRect, step.placement]);
@@ -122,7 +128,7 @@ const OnboardingTooltip = ({
         className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998]"
         onClick={onSkip}
       />
-      
+
       {/* Spotlight */}
       {targetRect && (
         <motion.div
@@ -179,11 +185,11 @@ const OnboardingTooltip = ({
               <div
                 key={i}
                 className={`w-2 h-2 rounded-full transition-colors ${
-                  i === currentStep 
-                    ? 'bg-[#00c6ff]' 
-                    : i < currentStep 
-                    ? 'bg-[#00c6ff]/60' 
-                    : 'bg-gray-600'
+                  i === currentStep
+                    ? "bg-[#00c6ff]"
+                    : i < currentStep
+                    ? "bg-[#00c6ff]/60"
+                    : "bg-gray-600"
                 }`}
               />
             ))}
@@ -200,7 +206,7 @@ const OnboardingTooltip = ({
               onClick={onNext}
               className="px-4 py-1.5 bg-[#00c6ff] hover:bg-[#0099cc] text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-1"
             >
-              {currentStep === totalSteps - 1 ? 'Finish' : 'Next'}
+              {currentStep === totalSteps - 1 ? "Finish" : "Next"}
               <ChevronRight className="w-3 h-3" />
             </button>
           </div>
@@ -219,7 +225,10 @@ interface LiveCountdownProps {
   className?: string;
 }
 
-const LiveCountdown = ({ expirationTime, className = "" }: LiveCountdownProps) => {
+const LiveCountdown = ({
+  expirationTime,
+  className = "",
+}: LiveCountdownProps) => {
   const [timeLeft, setTimeLeft] = useState<{
     expired: boolean;
     days: number;
@@ -256,7 +265,7 @@ const LiveCountdown = ({ expirationTime, className = "" }: LiveCountdownProps) =
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
     const totalHours = Math.floor(totalSeconds / 3600);
-    
+
     // Calculate percentage of trial time remaining
     const percentage = Math.max(0, Math.min(100, (diff / totalTrialMs) * 100));
 
@@ -288,7 +297,9 @@ const LiveCountdown = ({ expirationTime, className = "" }: LiveCountdownProps) =
 
   if (!timeLeft) {
     return (
-      <div className={`animate-pulse bg-white/10 h-20 rounded-xl ${className}`} />
+      <div
+        className={`animate-pulse bg-white/10 h-20 rounded-xl ${className}`}
+      />
     );
   }
 
@@ -309,30 +320,30 @@ const LiveCountdown = ({ expirationTime, className = "" }: LiveCountdownProps) =
   }
 
   const getUrgencyColor = () => {
-    if (timeLeft.totalHours <= 24) return 'red';
-    if (timeLeft.totalHours <= 72) return 'yellow';
-    return 'blue';
+    if (timeLeft.totalHours <= 24) return "red";
+    if (timeLeft.totalHours <= 72) return "yellow";
+    return "blue";
   };
 
   const urgencyColor = getUrgencyColor();
   const colorClasses = {
     red: {
-      bg: 'bg-red-500/20',
-      text: 'text-red-400',
-      border: 'border-red-500/30',
-      progress: 'bg-red-500',
+      bg: "bg-red-500/20",
+      text: "text-red-400",
+      border: "border-red-500/30",
+      progress: "bg-red-500",
     },
     yellow: {
-      bg: 'bg-yellow-500/20',
-      text: 'text-yellow-400',
-      border: 'border-yellow-500/30',
-      progress: 'bg-yellow-500',
+      bg: "bg-yellow-500/20",
+      text: "text-yellow-400",
+      border: "border-yellow-500/30",
+      progress: "bg-yellow-500",
     },
     blue: {
-      bg: 'bg-blue-500/20',
-      text: 'text-blue-400',
-      border: 'border-blue-500/30',
-      progress: 'bg-blue-500',
+      bg: "bg-blue-500/20",
+      text: "text-blue-400",
+      border: "border-blue-500/30",
+      progress: "bg-blue-500",
     },
   };
 
@@ -374,11 +385,15 @@ const LiveCountdown = ({ expirationTime, className = "" }: LiveCountdownProps) =
           <div className="text-xs opacity-75">Hours</div>
         </div>
         <div>
-          <div className="text-lg font-bold tabular-nums">{timeLeft.minutes}</div>
+          <div className="text-lg font-bold tabular-nums">
+            {timeLeft.minutes}
+          </div>
           <div className="text-xs opacity-75">Min</div>
         </div>
         <div>
-          <div className="text-lg font-bold tabular-nums">{timeLeft.seconds}</div>
+          <div className="text-lg font-bold tabular-nums">
+            {timeLeft.seconds}
+          </div>
           <div className="text-xs opacity-75">Sec</div>
         </div>
       </div>
@@ -387,9 +402,9 @@ const LiveCountdown = ({ expirationTime, className = "" }: LiveCountdownProps) =
       <div className="text-center mt-3 pt-3 border-t border-current/20">
         <p className="text-xs opacity-75">
           Expires {formatDate(expirationTime)} at{" "}
-          {new Date(expirationTime).toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit' 
+          {new Date(expirationTime).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
           })}
         </p>
       </div>
@@ -403,32 +418,36 @@ const LiveCountdown = ({ expirationTime, className = "" }: LiveCountdownProps) =
 
 const TOUR_STEPS: TooltipStep[] = [
   {
-    id: 'profile-header',
-    target: 'profile-header',
-    title: 'Welcome to Your Profile!',
-    content: 'This is your personal dashboard where you can view your account details and manage your blueprint selections.',
-    placement: 'bottom',
+    id: "profile-header",
+    target: "profile-header",
+    title: "Welcome to Your Profile!",
+    content:
+      "This is your personal dashboard where you can view your account details and manage your blueprint selections.",
+    placement: "bottom",
   },
   {
-    id: 'trial-status',
-    target: 'trial-status',
-    title: 'Live Trial Countdown',
-    content: 'Watch your trial time tick down in real-time! This meter shows exactly how much premium access you have left.',
-    placement: 'left',
+    id: "trial-status",
+    target: "trial-status",
+    title: "Live Trial Countdown",
+    content:
+      "Watch your trial time tick down in real-time! This meter shows exactly how much premium access you have left.",
+    placement: "left",
   },
   {
-    id: 'blueprints-section',
-    target: 'blueprints-section',
-    title: 'Blueprint Management',
-    content: 'This is where you pick blueprints—search or select all! Your selections will be used in the Crafting Calculator.',
-    placement: 'top',
+    id: "blueprints-section",
+    target: "blueprints-section",
+    title: "Blueprint Management",
+    content:
+      "This is where you pick blueprints—search or select all! Your selections will be used in the Crafting Calculator.",
+    placement: "top",
   },
   {
-    id: 'search-blueprints',
-    target: 'search-blueprints',
-    title: 'Quick Blueprint Search',
-    content: 'Use this search to quickly find specific blueprints. You can also use the category filters below!',
-    placement: 'bottom',
+    id: "search-blueprints",
+    target: "search-blueprints",
+    title: "Quick Blueprint Search",
+    content:
+      "Use this search to quickly find specific blueprints. You can also use the category filters below!",
+    placement: "bottom",
   },
 ];
 
@@ -559,26 +578,34 @@ const BLUEPRINT_CATEGORIES = {
     "BDU Blouse - Rolled-up",
     "BDU Trousers",
     "Beanie",
+    "Beret",
     "Boonie",
     "Cap - All Variants",
     "Cargo Pants",
     "Cargo Pants (Colored)",
     "Cardigan",
     "Classic Shoe",
+    "Cotton Shirt",
     "CWU-27 Pilot Coveralls",
     "Dress",
     "Fedora",
     "Fisher Hat",
     "Flat Cap",
     "Half Mask",
+    "Hard Hat",
+    "Hoodie",
     "Hunting Vest",
     "IIFS Large Combat Field Pack",
     "Jacket",
     "Jeans",
     "Jeans (Colored)",
+    "Jungle Boots",
     "KLMK Coveralls",
     "Knit Cap",
     "Kolobok Backpack",
+    "KZS Pants",
+    "Leather Jacket (old)",
+    "Lumber Jacket - All Variants",
     "M70 Backpack",
     "M70 Cap",
     "M70 Parka",
@@ -595,6 +622,7 @@ const BLUEPRINT_CATEGORIES = {
     "Paper Bag",
     "Polo",
     "Pullover",
+    "Raincoat",
     "Robe",
     "Runner Shoe",
     "Sneaker",
@@ -605,6 +633,8 @@ const BLUEPRINT_CATEGORIES = {
     "Suit Pants",
     "Sweater",
     "Sweat Pants",
+    "Track Jacket",
+    "Track Pants",
     "TShirt",
     "US Combat Boots",
     "Veshmeshok Backpack",
@@ -695,8 +725,10 @@ export default function ProfilePage() {
   // Enhanced state management
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [ownedBlueprints, setOwnedBlueprints] = useState<string[]>([]); // User's saved selections from DB
-  const [selectedBlueprints, setSelectedBlueprints] = useState<Set<string>>(new Set()); // Current UI selections
-  
+  const [selectedBlueprints, setSelectedBlueprints] = useState<Set<string>>(
+    new Set()
+  ); // Current UI selections
+
   // Get all available blueprints from categories (excluding HQ Components and Components from count)
   const allAvailableBlueprints = useMemo(() => {
     return Object.values(BLUEPRINT_CATEGORIES).flat().sort();
@@ -704,7 +736,7 @@ export default function ProfilePage() {
 
   // Get blueprints that count towards the total (excluding HQ Components and Components)
   const countableBlueprints = useMemo(() => {
-    const excludedCategories = ['HQ Components', 'Components'];
+    const excludedCategories = ["HQ Components", "Components"];
     return Object.entries(BLUEPRINT_CATEGORIES)
       .filter(([category]) => !excludedCategories.includes(category))
       .flatMap(([, blueprints]) => blueprints)
@@ -714,8 +746,8 @@ export default function ProfilePage() {
   // Get default selected blueprints (HQ Components + Components)
   const defaultSelectedBlueprints = useMemo(() => {
     return [
-      ...BLUEPRINT_CATEGORIES['HQ Components'],
-      ...BLUEPRINT_CATEGORIES['Components']
+      ...BLUEPRINT_CATEGORIES["HQ Components"],
+      ...BLUEPRINT_CATEGORIES["Components"],
     ];
   }, []);
   const [loadingState, setLoadingState] = useState<LoadingState>({
@@ -755,7 +787,7 @@ export default function ProfilePage() {
   // Check for slow connection and onboarding status
   useEffect(() => {
     setIsSlowConn(isSlowConnection());
-    
+
     // Check if user has completed onboarding
     const onboardingCompleted = localStorage.getItem(ONBOARDING_COMPLETED_KEY);
     if (!onboardingCompleted && user) {
@@ -779,7 +811,7 @@ export default function ProfilePage() {
   const handleSkipTour = () => {
     setShowOnboarding(false);
     setCurrentTourStep(0);
-    localStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true');
+    localStorage.setItem(ONBOARDING_COMPLETED_KEY, "true");
   };
 
   // Clear all timeouts on unmount
@@ -928,30 +960,42 @@ export default function ProfilePage() {
   );
 
   // Initialize selected blueprints from localStorage or database
-  const initializeSelectedBlueprints = useCallback((savedBlueprints: string[]) => {
-    const saved = localStorage.getItem("selected_blueprints");
-    let initialSelections = new Set(defaultSelectedBlueprints); // Start with HQ Components + Components
-    
-    if (saved) {
-      try {
-        const savedSelections = JSON.parse(saved);
-        // Only keep valid blueprint names that exist in our categories
-        const validSelections = savedSelections.filter((bp: string) =>
-          allAvailableBlueprints.includes(bp)
-        );
-        initialSelections = new Set([...defaultSelectedBlueprints, ...validSelections]);
-      } catch (error) {
-        console.error("Error parsing saved blueprints:", error);
-        // Fall back to database selections + defaults
-        initialSelections = new Set([...defaultSelectedBlueprints, ...savedBlueprints]);
+  const initializeSelectedBlueprints = useCallback(
+    (savedBlueprints: string[]) => {
+      const saved = localStorage.getItem("selected_blueprints");
+      let initialSelections = new Set(defaultSelectedBlueprints); // Start with HQ Components + Components
+
+      if (saved) {
+        try {
+          const savedSelections = JSON.parse(saved);
+          // Only keep valid blueprint names that exist in our categories
+          const validSelections = savedSelections.filter((bp: string) =>
+            allAvailableBlueprints.includes(bp)
+          );
+          initialSelections = new Set([
+            ...defaultSelectedBlueprints,
+            ...validSelections,
+          ]);
+        } catch (error) {
+          console.error("Error parsing saved blueprints:", error);
+          // Fall back to database selections + defaults
+          initialSelections = new Set([
+            ...defaultSelectedBlueprints,
+            ...savedBlueprints,
+          ]);
+        }
+      } else {
+        // Use database selections + defaults as initial state
+        initialSelections = new Set([
+          ...defaultSelectedBlueprints,
+          ...savedBlueprints,
+        ]);
       }
-    } else {
-      // Use database selections + defaults as initial state
-      initialSelections = new Set([...defaultSelectedBlueprints, ...savedBlueprints]);
-    }
-    
-    setSelectedBlueprints(initialSelections);
-  }, [allAvailableBlueprints, defaultSelectedBlueprints]);
+
+      setSelectedBlueprints(initialSelections);
+    },
+    [allAvailableBlueprints, defaultSelectedBlueprints]
+  );
 
   // Save blueprint selections
   const saveBlueprintSelections = useCallback(async () => {
@@ -1017,8 +1061,8 @@ export default function ProfilePage() {
       setOwnedBlueprints(blueprintsToSave);
 
       // Count only non-default blueprints for success message
-      const countableSelected = Array.from(selectedBlueprints).filter(bp => 
-        !defaultSelectedBlueprints.includes(bp)
+      const countableSelected = Array.from(selectedBlueprints).filter(
+        (bp) => !defaultSelectedBlueprints.includes(bp)
       ).length;
 
       setSaveStatus({
@@ -1057,22 +1101,26 @@ export default function ProfilePage() {
     });
   }, []);
 
-  const toggleCategory = useCallback((category: string) => {
-    const categoryBlueprints = BLUEPRINT_CATEGORIES[category as keyof typeof BLUEPRINT_CATEGORIES];
-    const allSelected = categoryBlueprints.every((bp) =>
-      selectedBlueprints.has(bp)
-    );
+  const toggleCategory = useCallback(
+    (category: string) => {
+      const categoryBlueprints =
+        BLUEPRINT_CATEGORIES[category as keyof typeof BLUEPRINT_CATEGORIES];
+      const allSelected = categoryBlueprints.every((bp) =>
+        selectedBlueprints.has(bp)
+      );
 
-    setSelectedBlueprints((prev) => {
-      const newSet = new Set(prev);
-      if (allSelected) {
-        categoryBlueprints.forEach((bp) => newSet.delete(bp));
-      } else {
-        categoryBlueprints.forEach((bp) => newSet.add(bp));
-      }
-      return newSet;
-    });
-  }, [selectedBlueprints]);
+      setSelectedBlueprints((prev) => {
+        const newSet = new Set(prev);
+        if (allSelected) {
+          categoryBlueprints.forEach((bp) => newSet.delete(bp));
+        } else {
+          categoryBlueprints.forEach((bp) => newSet.add(bp));
+        }
+        return newSet;
+      });
+    },
+    [selectedBlueprints]
+  );
 
   const selectAll = useCallback(() => {
     setSelectedBlueprints(new Set(allAvailableBlueprints));
@@ -1088,7 +1136,10 @@ export default function ProfilePage() {
     let blueprints = allAvailableBlueprints;
 
     if (selectedCategory !== "all") {
-      const categoryBlueprints = BLUEPRINT_CATEGORIES[selectedCategory as keyof typeof BLUEPRINT_CATEGORIES];
+      const categoryBlueprints =
+        BLUEPRINT_CATEGORIES[
+          selectedCategory as keyof typeof BLUEPRINT_CATEGORIES
+        ];
       blueprints = blueprints.filter((bp) => categoryBlueprints.includes(bp));
     }
 
@@ -1110,10 +1161,10 @@ export default function ProfilePage() {
 
   // Calculate stats (exclude HQ Components and Components from count)
   const { selected, total } = useMemo(() => {
-    const countableSelected = Array.from(selectedBlueprints).filter(bp => 
+    const countableSelected = Array.from(selectedBlueprints).filter((bp) =>
       countableBlueprints.includes(bp)
     ).length;
-    
+
     return {
       selected: countableSelected,
       total: countableBlueprints.length,
@@ -1123,9 +1174,15 @@ export default function ProfilePage() {
   // Check if there are any changes from the initial state (for save button state)
   const hasChanges = useMemo(() => {
     const currentSelectionsArray = Array.from(selectedBlueprints).sort();
-    const initialSelectionsArray = [...defaultSelectedBlueprints, ...ownedBlueprints].sort();
-    
-    return JSON.stringify(currentSelectionsArray) !== JSON.stringify(initialSelectionsArray);
+    const initialSelectionsArray = [
+      ...defaultSelectedBlueprints,
+      ...ownedBlueprints,
+    ].sort();
+
+    return (
+      JSON.stringify(currentSelectionsArray) !==
+      JSON.stringify(initialSelectionsArray)
+    );
   }, [selectedBlueprints, defaultSelectedBlueprints, ownedBlueprints]);
 
   // Handle authentication loading
@@ -1163,7 +1220,7 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] to-[#1a1a1a] pt-24 pb-12 px-4 relative">
       <div className="max-w-6xl mx-auto">
         {/* Profile Card */}
-        <div 
+        <div
           className="bg-[#141414]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-10 mb-6 relative overflow-hidden"
           data-tour="profile-header"
         >
@@ -1298,11 +1355,11 @@ export default function ProfilePage() {
 
             {/* Live Trial Status */}
             {userProfile?.hub_trial && userProfile?.trial_expiration && (
-              <div 
+              <div
                 className="md:col-span-2 lg:col-span-1"
                 data-tour="trial-status"
               >
-                <LiveCountdown 
+                <LiveCountdown
                   expirationTime={userProfile.trial_expiration}
                   className="h-full"
                 />
@@ -1319,7 +1376,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Blueprints Section */}
-        <div 
+        <div
           className="bg-[#141414]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-10 relative overflow-hidden"
           data-tour="blueprints-section"
         >
@@ -1338,11 +1395,13 @@ export default function ProfilePage() {
             </div>
 
             <p className="text-[#a0a0a0] text-base max-w-2xl mx-auto">
-              Select the blueprints you currently own. These will appear in the Crafting
-              Calculator and help optimize your gameplay experience. Choose from {countableBlueprints.length} available blueprints!
+              Select the blueprints you currently own. These will appear in the
+              Crafting Calculator and help optimize your gameplay experience.
+              Choose from {countableBlueprints.length} available blueprints!
               <br />
               <span className="text-sm text-[#a0a0a0]/80 mt-1 block">
-                Note: HQ Components and Components are automatically included and don't count toward your total.
+                Note: HQ Components and Components are automatically included
+                and don't count toward your total.
               </span>
             </p>
           </div>
@@ -1350,7 +1409,7 @@ export default function ProfilePage() {
           {/* Search and Controls */}
           <div className="mb-6 space-y-4">
             {/* Search Bar */}
-            <div 
+            <div
               className="relative max-w-md mx-auto"
               data-tour="search-blueprints"
             >
@@ -1407,15 +1466,16 @@ export default function ProfilePage() {
               >
                 Deselect All
               </button>
-              {selectedCategory !== "all" && !['HQ Components', 'Components'].includes(selectedCategory) && (
-                <button
-                  onClick={() => toggleCategory(selectedCategory)}
-                  disabled={loadingState.blueprints}
-                  className="px-4 py-2 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg text-sm font-medium hover:bg-blue-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Toggle {selectedCategory}
-                </button>
-              )}
+              {selectedCategory !== "all" &&
+                !["HQ Components", "Components"].includes(selectedCategory) && (
+                  <button
+                    onClick={() => toggleCategory(selectedCategory)}
+                    disabled={loadingState.blueprints}
+                    className="px-4 py-2 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg text-sm font-medium hover:bg-blue-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Toggle {selectedCategory}
+                  </button>
+                )}
             </div>
           </div>
 
@@ -1432,7 +1492,9 @@ export default function ProfilePage() {
           ) : errorState.profile || errorState.blueprints ? (
             <div className="text-center py-12">
               <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-6 rounded-xl max-w-md mx-auto">
-                <h3 className="text-lg font-semibold mb-2">Error Loading Data</h3>
+                <h3 className="text-lg font-semibold mb-2">
+                  Error Loading Data
+                </h3>
                 <p className="mb-4">
                   {errorState.profile || errorState.blueprints}
                 </p>
@@ -1497,7 +1559,9 @@ export default function ProfilePage() {
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <div className="text-gray-400 text-lg mb-2">No blueprints found</div>
+                  <div className="text-gray-400 text-lg mb-2">
+                    No blueprints found
+                  </div>
                   <p className="text-gray-500 text-sm">
                     {searchQuery || selectedCategory !== "all"
                       ? "Try adjusting your search or filter criteria"
