@@ -93,6 +93,7 @@ export interface Database {
           description?: string | null
         }
       }
+      // UPDATED: Enhanced page_sessions table with new columns
       page_sessions: {
         Row: {
           id: string
@@ -103,6 +104,8 @@ export interface Database {
           exit_time: string | null
           time_spent_seconds: number | null
           is_active: boolean | null
+          created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
@@ -112,6 +115,8 @@ export interface Database {
           enter_time?: string | null
           exit_time?: string | null
           is_active?: boolean | null
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
@@ -121,6 +126,8 @@ export interface Database {
           enter_time?: string | null
           exit_time?: string | null
           is_active?: boolean | null
+          created_at?: string
+          updated_at?: string
         }
       }
     }
@@ -166,6 +173,19 @@ export interface Database {
           days: number
         }
         Returns: void
+      }
+      // NEW: Session cleanup functions
+      cleanup_orphaned_page_sessions: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      cleanup_old_page_sessions: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      manual_session_cleanup: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
       }
     }
   }
