@@ -19,20 +19,15 @@ export function usePageTracking() {
   const pathname = usePathname()
   const supabase = createClient()
   
-  // Session management
+  // Session management refs
   const currentSessionRef = useRef<PageSession | null>(null)
-  const sessionStartTimeRef = useRef<number | null>(null)
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const cleanupTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  
-  // Prevent multiple simultaneous session creations
+  const visibilityTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const sessionCreationLockRef = useRef<boolean>(false)
-  
-  // Track if component is mounted to prevent memory leaks
   const isMountedRef = useRef<boolean>(true)
 
   const endCurrentSession = useCallback(async (skipCleanup = false) => {
-    if (!currentSessionRef.current || !sessionStartTimeRef.current) return
+    if (!currentSessionRef.current) return
 
     try {
       const exitTime = new Date().toISOString()
@@ -47,7 +42,6 @@ export function usePageTracking() {
 
       if (!skipCleanup) {
         currentSessionRef.current = null
-        sessionStartTimeRef.current = null
       }
     } catch (error) {
       console.error('Error ending page session:', error)
@@ -65,7 +59,7 @@ export function usePageTracking() {
         await endCurrentSession(true)
       }
 
-      // Clean up any orphaned active sessions for this user/page
+      // Clean up any orphaned active sessions for this user/page combination
       await supabase
         .from('page_sessions')
         .update({
@@ -99,9 +93,6 @@ export function usePageTracking() {
 
       if (data && isMountedRef.current) {
         currentSessionRef.current = data
-        sessionStartTimeRef.current = Date.now()
-        
-        // Start heartbeat for activity tracking
         startHeartbeat()
       }
     } catch (error) {
@@ -115,11 +106,12 @@ export function usePageTracking() {
     if (!currentSessionRef.current) return
 
     try {
+      // Update activity status and updated_at timestamp
+      // The updated_at will be automatically set by the database trigger
       await supabase
         .from('page_sessions')
         .update({ 
-          is_active: isActive,
-          // DO NOT update enter_time - this preserves the original session start time
+          is_active: isActive
         })
         .eq('id', currentSessionRef.current.id)
     } catch (error) {
@@ -132,12 +124,12 @@ export function usePageTracking() {
       clearInterval(heartbeatIntervalRef.current)
     }
 
-    // Send heartbeat every 30 seconds when page is visible
+    // Send heartbeat every 5 minutes when page is visible
     heartbeatIntervalRef.current = setInterval(() => {
       if (document.visibilityState === 'visible' && currentSessionRef.current) {
         updateSessionActivity(true)
       }
-    }, 30000)
+    }, 5 * 60 * 1000) // 5 minutes
   }, [updateSessionActivity])
 
   const stopHeartbeat = useCallback(() => {
@@ -154,18 +146,21 @@ export function usePageTracking() {
       updateSessionActivity(false)
       stopHeartbeat()
       
-      // Set a timeout to end the session if the page stays hidden too long
-      cleanupTimeoutRef.current = setTimeout(() => {
-        endCurrentSession()
-      }, 5 * 60 * 1000) // 5 minutes
+      // Set a timeout to end the session if the page stays hidden for more than 8 minutes
+      // This is less than the 10-minute cleanup threshold to ensure we capture the exit
+      visibilityTimeoutRef.current = setTimeout(() => {
+        if (currentSessionRef.current && document.visibilityState === 'hidden') {
+          endCurrentSession()
+        }
+      }, 8 * 60 * 1000) // 8 minutes
     } else if (document.visibilityState === 'visible') {
       updateSessionActivity(true)
       startHeartbeat()
       
-      // Cancel the cleanup timeout since the page is visible again
-      if (cleanupTimeoutRef.current) {
-        clearTimeout(cleanupTimeoutRef.current)
-        cleanupTimeoutRef.current = null
+      // Cancel the timeout since the page is visible again
+      if (visibilityTimeoutRef.current) {
+        clearTimeout(visibilityTimeoutRef.current)
+        visibilityTimeoutRef.current = null
       }
     }
   }, [updateSessionActivity, startHeartbeat, stopHeartbeat, endCurrentSession])
@@ -174,20 +169,30 @@ export function usePageTracking() {
     // Use sendBeacon for more reliable unload tracking
     if (currentSessionRef.current && navigator.sendBeacon) {
       const exitTime = new Date().toISOString()
-      const updateData = {
+      const updatePayload = JSON.stringify({
         exit_time: exitTime,
         is_active: false
-      }
+      })
       
-      // Send the update via beacon API for better reliability
-      navigator.sendBeacon(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/page_sessions?id=eq.${currentSessionRef.current.id}`,
-        JSON.stringify(updateData)
-      )
-    } else {
-      // Fallback to regular API call
-      endCurrentSession()
+      // Construct the Supabase REST API URL for the specific session
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const apiKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      
+      if (supabaseUrl && apiKey) {
+        const url = `${supabaseUrl}/rest/v1/page_sessions?id=eq.${currentSessionRef.current.id}`
+        
+        try {
+          navigator.sendBeacon(url, new Blob([updatePayload], {
+            type: 'application/json'
+          }))
+        } catch (error) {
+          console.error('Error sending beacon:', error)
+        }
+      }
     }
+    
+    // Fallback to regular API call
+    endCurrentSession()
   }, [endCurrentSession])
 
   // Main effect for session management
@@ -223,9 +228,9 @@ export function usePageTracking() {
       
       stopHeartbeat()
       
-      if (cleanupTimeoutRef.current) {
-        clearTimeout(cleanupTimeoutRef.current)
-        cleanupTimeoutRef.current = null
+      if (visibilityTimeoutRef.current) {
+        clearTimeout(visibilityTimeoutRef.current)
+        visibilityTimeoutRef.current = null
       }
       
       endCurrentSession()
