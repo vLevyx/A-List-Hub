@@ -31,20 +31,11 @@ export const metadata: Metadata = {
     description: 'Premium gaming tools for ELAN Life players',
     type: 'website',
     locale: 'en_US',
-    images: [
-      {
-        url: '/ALIST-HUB.png', // Image for link card
-        width: 1200,
-        height: 630,
-        alt: 'A-List Hub Logo',
-      },
-    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'A-List Hub',
     description: 'Premium gaming tools for ELAN Life players',
-    images: ['/ALIST-HUB.png'], // Image for link card
   },
   robots: {
     index: true,
