@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     locale: 'en_US',
     images: [
       {
-        url: '/apple-touch-icon.png', // Image for link card
+        url: '/ALIST-HUB.png', // Image for link card
         width: 1200,
         height: 630,
         alt: 'A-List Hub Logo',
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'A-List Hub',
     description: 'Premium gaming tools for ELAN Life players',
-    images: ['/apple-touch-icon.png'], // Image for link card
+    images: ['/ALIST-HUB.png'], // Image for link card
   },
   robots: {
     index: true,
