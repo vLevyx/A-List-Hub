@@ -1,3 +1,3 @@
-export const APP_VERSION = '1.2.1'
-export const LAST_UPDATED = 'July 4, 2025'
-export const ELAN_VERSION = 'v.0.8.9'
+export const APP_VERSION = '1.3.0'
+export const LAST_UPDATED = 'July 7, 2025'
+export const ELAN_VERSION = 'v.0.8.10'
