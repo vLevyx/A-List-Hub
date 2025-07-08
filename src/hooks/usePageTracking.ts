@@ -1,3 +1,4 @@
+// src/hooks/usePageTracking.ts
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
@@ -32,6 +33,8 @@ export function usePageTracking() {
     try {
       const exitTime = new Date().toISOString()
       
+      // With new RLS policy, users can only update their own sessions
+      // Admins can update any session
       await supabase
         .from('page_sessions')
         .update({
@@ -60,23 +63,24 @@ export function usePageTracking() {
       }
 
       // Clean up any orphaned active sessions for this user/page combination
+      // RLS policy ensures users can only update their own sessions
       await supabase
         .from('page_sessions')
         .update({
           exit_time: new Date().toISOString(),
           is_active: false
         })
-        .eq('discord_id', discordId)
+        .eq('discord_id', discordId) // RLS will automatically filter to user's own data
         .eq('page_path', pagePath)
         .eq('is_active', true)
 
-      // Create new session
+      // Create new session - WITH CHECK ensures discord_id matches current user
       const enterTime = new Date().toISOString()
       const { data, error } = await supabase
         .from('page_sessions')
         .insert([
           {
-            discord_id: discordId,
+            discord_id: discordId, // Must match current user's discord_id
             username,
             page_path: pagePath,
             enter_time: enterTime,
@@ -106,8 +110,7 @@ export function usePageTracking() {
     if (!currentSessionRef.current) return
 
     try {
-      // Update activity status and updated_at timestamp
-      // The updated_at will be automatically set by the database trigger
+      // RLS policy ensures users can only update their own sessions
       await supabase
         .from('page_sessions')
         .update({ 
@@ -147,7 +150,6 @@ export function usePageTracking() {
       stopHeartbeat()
       
       // Set a timeout to end the session if the page stays hidden for more than 8 minutes
-      // This is less than the 10-minute cleanup threshold to ensure we capture the exit
       visibilityTimeoutRef.current = setTimeout(() => {
         if (currentSessionRef.current && document.visibilityState === 'hidden') {
           endCurrentSession()
@@ -166,32 +168,52 @@ export function usePageTracking() {
   }, [updateSessionActivity, startHeartbeat, stopHeartbeat, endCurrentSession])
 
   const handlePageUnload = useCallback(() => {
-    // Use sendBeacon for more reliable unload tracking
-    if (currentSessionRef.current && navigator.sendBeacon) {
+    // Enhanced unload handling with keepalive fetch
+    if (currentSessionRef.current) {
       const exitTime = new Date().toISOString()
-      const updatePayload = JSON.stringify({
-        exit_time: exitTime,
-        is_active: false
-      })
       
-      // Construct the Supabase REST API URL for the specific session
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
       const apiKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
       
-      if (supabaseUrl && apiKey) {
+      if (supabaseUrl && apiKey && 'fetch' in window) {
         const url = `${supabaseUrl}/rest/v1/page_sessions?id=eq.${currentSessionRef.current.id}`
         
+        const updatePayload = JSON.stringify({
+          exit_time: exitTime,
+          is_active: false
+        })
+        
         try {
-          navigator.sendBeacon(url, new Blob([updatePayload], {
-            type: 'application/json'
-          }))
+          // Use fetch with keepalive for better browser support
+          fetch(url, {
+            method: 'PATCH',
+            headers: {
+              'apikey': apiKey,
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal'
+            },
+            body: updatePayload,
+            keepalive: true // This ensures the request continues even if page unloads
+          }).catch(error => {
+            console.error('Error sending keepalive request:', error)
+          })
         } catch (error) {
-          console.error('Error sending beacon:', error)
+          console.error('Error sending unload request:', error)
+          // Fallback to sendBeacon if fetch fails
+          if (navigator.sendBeacon) {
+            try {
+              const beaconUrl = `${url}&apikey=${apiKey}`
+              navigator.sendBeacon(beaconUrl, updatePayload)
+            } catch (beaconError) {
+              console.error('Error with sendBeacon fallback:', beaconError)
+            }
+          }
         }
       }
     }
     
-    // Fallback to regular API call
+    // Always attempt regular API call as final fallback
     endCurrentSession()
   }, [endCurrentSession])
 

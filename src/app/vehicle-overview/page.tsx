@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { usePageTracking } from '@/hooks/usePageTracking'
-import { Search, Filter, X, TrendingUp, Users, DollarSign, Truck, Car, Plane } from 'lucide-react'
+import { Search, Filter, X, TrendingUp, Users, DollarSign, Truck, Car, Plane, Warehouse } from 'lucide-react'
 import Image from 'next/image'
 
 // Types
@@ -447,7 +447,7 @@ export default function VehicleOverviewPage() {
 
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 text-center group hover:bg-white/10 transition-all">
               <div className="w-12 h-12 bg-gradient-to-r from-[#00c6ff] to-[#0072ff] rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                <Truck className="w-6 h-6 text-white" />
+                <Warehouse className="w-6 h-6 text-white" />
               </div>
               <div className="text-2xl font-bold text-[#00c6ff] mb-1">{vehicleStats.dealerLocations}</div>
               <div className="text-white/60 text-sm">Dealer Locations</div>

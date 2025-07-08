@@ -1,8 +1,7 @@
 // src/hooks/useSessionAnalytics.ts
-
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from './useAuth'
 import { getDiscordId } from '@/lib/utils'
@@ -43,7 +42,16 @@ interface AnalyticsOptions {
   dateRange?: { from: Date; to: Date }
   pagePath?: string
   includeActive?: boolean
+  targetUserId?: string // For admin use - to view specific user's analytics
 }
+
+// Admin Discord IDs for client-side admin checking
+const ADMIN_DISCORD_IDS = [
+  '154388953053659137',
+  '344637470908088322',
+  '487476487386038292',
+  '492053410967846933',
+]
 
 export function useSessionAnalytics(options: AnalyticsOptions = {}) {
   const { user } = useAuth()
@@ -58,8 +66,15 @@ export function useSessionAnalytics(options: AnalyticsOptions = {}) {
       to: new Date() 
     },
     pagePath,
-    includeActive = true
+    includeActive = true,
+    targetUserId // Admin can specify a user to analyze
   } = options
+
+  // Check if current user is admin
+  const isAdmin = useCallback(() => {
+    const discordId = getDiscordId(user)
+    return discordId && ADMIN_DISCORD_IDS.includes(discordId)
+  }, [user])
 
   useEffect(() => {
     if (!user) {
@@ -76,13 +91,18 @@ export function useSessionAnalytics(options: AnalyticsOptions = {}) {
         const discordId = getDiscordId(user)
         if (!discordId) throw new Error('No Discord ID found')
 
-        // Build query
+        // Build query - RLS policy will automatically filter based on permissions
         let query = supabase
           .from('page_sessions')
           .select('*')
-          .eq('discord_id', discordId)
           .gte('enter_time', dateRange.from.toISOString())
           .lte('enter_time', dateRange.to.toISOString())
+
+        // If admin is viewing specific user's data
+        if (targetUserId && isAdmin()) {
+          query = query.eq('discord_id', targetUserId)
+        }
+        // For non-admins, RLS policy automatically filters to their own data
 
         // Add page filter if specified
         if (pagePath) {
@@ -212,9 +232,14 @@ export function useSessionAnalytics(options: AnalyticsOptions = {}) {
     }
 
     fetchAnalytics()
-  }, [user, dateRange.from, dateRange.to, pagePath, includeActive, supabase])
+  }, [user, dateRange.from, dateRange.to, pagePath, includeActive, targetUserId, isAdmin, supabase])
 
-  return { analytics, loading, error }
+  return { 
+    analytics, 
+    loading, 
+    error,
+    isAdmin: isAdmin() 
+  }
 }
 
 // Utility function to format time duration
@@ -239,29 +264,52 @@ export function formatPercentage(value: number): string {
 
 // Hook for real-time session monitoring (admin use)
 export function useRealtimeSessionMonitoring() {
+  const { user } = useAuth()
   const [activeSessions, setActiveSessions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
 
-  useEffect(() => {
-    const fetchActiveSessions = async () => {
-      const { data, error } = await supabase
-        .from('page_sessions')
-        .select('*')
-        .eq('is_active', true)
-        .order('updated_at', { ascending: false })
+  // Check if current user is admin
+  const isCurrentUserAdmin = useCallback(() => {
+    const discordId = getDiscordId(user)
+    return discordId && ADMIN_DISCORD_IDS.includes(discordId)
+  }, [user])
 
-      if (!error && data) {
-        setActiveSessions(data)
-      }
+  useEffect(() => {
+    if (!user || !isCurrentUserAdmin()) {
+      setActiveSessions([])
       setLoading(false)
+      setError('Admin access required')
+      return
+    }
+
+    const fetchActiveSessions = async () => {
+      try {
+        // RLS policy will automatically allow admins to see all active sessions
+        const { data, error: fetchError } = await supabase
+          .from('page_sessions')
+          .select('*')
+          .eq('is_active', true)
+          .order('updated_at', { ascending: false })
+
+        if (fetchError) throw fetchError
+
+        setActiveSessions(data || [])
+        setError(null)
+      } catch (err) {
+        console.error('Error fetching active sessions:', err)
+        setError(err instanceof Error ? err.message : 'Failed to fetch active sessions')
+      } finally {
+        setLoading(false)
+      }
     }
 
     fetchActiveSessions()
 
     // Set up real-time subscription
     const channel = supabase
-      .channel('active-sessions')
+      .channel('active-sessions-admin')
       .on(
         'postgres_changes',
         {
@@ -270,14 +318,21 @@ export function useRealtimeSessionMonitoring() {
           table: 'page_sessions',
           filter: 'is_active=eq.true'
         },
-        fetchActiveSessions
+        () => {
+          fetchActiveSessions()
+        }
       )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase])
+  }, [user, isCurrentUserAdmin, supabase])
 
-  return { activeSessions, loading }
+  return { 
+    activeSessions, 
+    loading, 
+    error,
+    isAdmin: isCurrentUserAdmin()
+  }
 }
