@@ -182,9 +182,22 @@ export default function AdminPage() {
 
         // Apply search filter if provided
         if (search) {
-          query = query.or(
-            `username.ilike.%${search}%,discord_id.ilike.%${search}%`
-          );
+          // Split search into terms and remove empty strings
+          const searchTerms = search
+            .trim()
+            .split(/\s+/)
+            .filter((term) => term.length > 0);
+
+          if (searchTerms.length > 0) {
+            // Create OR conditions for each term against username and discord_id
+            const searchConditions = searchTerms
+              .map(
+                (term) => `username.ilike.%${term}%,discord_id.ilike.%${term}%`
+              )
+              .join(",");
+
+            query = query.or(searchConditions);
+          }
         }
 
         // Get count first

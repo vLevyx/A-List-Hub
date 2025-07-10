@@ -16,8 +16,8 @@ const testimonials = [
     author: "Clark Kent"
   },
   {
-    quote: "Is it driving you daft while learning to craft? Then YOU need the A-List Hub",
-    author: "Chee Masters"
+    quote: "Super helpful and easy tools to use, definitely a must-try for everyone!",
+    author: "Xena Ramirez"
   }
 ]
 
