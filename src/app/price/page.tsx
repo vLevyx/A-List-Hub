@@ -264,7 +264,7 @@ export default function PricePlannerPage() {
     },
     Attachments: {
       "4x20 Carry Handle Scope": {
-        "Non-HQ": { Component: 41, "Tempered Glass": 18 },
+        "Non-HQ": { Component: 4, "Tempered Glass": 1 },
       },
       "4.7mm FlashHider": { "Non-HQ": { Component: 1 } },
       "6.8x51mm FlashHider": {
