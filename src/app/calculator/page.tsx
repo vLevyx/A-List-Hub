@@ -1126,8 +1126,8 @@ export default function CalculatorPage() {
     Attachments: {
       "4x20 Carry Handle Scope": {
         "Non-HQ": {
-          Component: 41,
-          "Tempered Glass": 18,
+          Component: 4,
+          "Tempered Glass": 1,
         },
       },
       "4.7mm FlashHider": {
