@@ -147,7 +147,7 @@ export default function ImprintPage() {
             Imprint
           </h1>
           <p className="text-white/70 text-lg max-w-2xl mx-auto">
-            Legal information and team details for The A-List ELAN Hub
+            Legal information and team details for The A-List Hub
           </p>
         </header>
 
