@@ -846,7 +846,7 @@ export default function CalculatorPage() {
       "UH-1H Transport Helicopter": 26,
     },
     backpacks: {
-      'ADA Assault Pack': 13, // MAKE SURE THIS IS CORRECT
+      'ADA Assault Pack': 19, // MAKE SURE THIS IS CORRECT
       "ALICE Medium Backpack": 13,
       "IIFS Large Combat Field Pack": 19,
       "Kolobok Backpack": 10,
