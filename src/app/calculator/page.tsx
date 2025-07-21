@@ -517,7 +517,7 @@ export default function CalculatorPage() {
       "Ural (Device)",
       "VW Rolf",
     ],
-    Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest"],
+    Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest", "Plate Carrier"],
     Helmets: [
       "PASGT Helmet",
       "PASGT Helmet - Camouflaged",
@@ -531,6 +531,7 @@ export default function CalculatorPage() {
       "ZSh-5 Helmet",
     ],
     Clothes: [
+      "ADA Assault Pack",
       "ALICE Medium Backpack",
       "Bandana",
       "Balaclava",
@@ -732,6 +733,7 @@ export default function CalculatorPage() {
     "6B3 Vest": 9,
     "M69 Vest": 7,
     "PASGT Vest": 7,
+    "Plate Carrier": 10,
 
     // ========== HELMETS ==========
     "PASGT Helmet": 4,
@@ -746,6 +748,7 @@ export default function CalculatorPage() {
     "ZSh-5 Helmet": 6,
 
     // ========== CLOTHES ==========
+    "ADA Assault Pack": 7,
     "ALICE Medium Backpack": 4,
     Bandana: 3,
     Balaclava: 3,
@@ -843,10 +846,11 @@ export default function CalculatorPage() {
       "UH-1H Transport Helicopter": 26,
     },
     backpacks: {
+      'ADA Assault Pack': 13, // MAKE SURE THIS IS CORRECT
       "ALICE Medium Backpack": 13,
       "IIFS Large Combat Field Pack": 19,
       "Kolobok Backpack": 10,
-      "M70 Backpack": 13,
+      "M70 Backpack": 8,
       "Veshmeshok Backpack": 6,
     },
   };
@@ -1393,6 +1397,9 @@ export default function CalculatorPage() {
           Cloth: 14,
         },
       },
+      "Plate Carrier": {
+        HQ: { Kevlar: 5 },
+      },
     },
     Helmets: {
       "PASGT Helmet": {
@@ -1457,6 +1464,9 @@ export default function CalculatorPage() {
       },
     },
     Clothes: {
+      "ADA Assault Pack": {
+        "Non-HQ": { Cloth: 32 },
+      },
       "ALICE Medium Backpack": {
         "Non-HQ": { Cloth: 2 },
       },
@@ -1958,6 +1968,7 @@ export default function CalculatorPage() {
     "6B3 Vest": 40,
     "M69 Vest": 40,
     "PASGT Vest": 40,
+    "Plate Carrier": 30,
 
     // Helmets
     "PASGT Helmet": 40,
@@ -1972,6 +1983,7 @@ export default function CalculatorPage() {
     "ZSh-5 Helmet": 40,
 
     // Clothing
+    "ADA Assault Pack": 20,
     "ALICE Medium Backpack": 40,
     Bandana: 20,
     Balaclava: 20,

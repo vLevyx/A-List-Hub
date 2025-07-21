@@ -555,7 +555,7 @@ const BLUEPRINT_CATEGORIES = {
     "VW Rolf",
   ],
 
-  Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest"],
+  Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest", "Plate Carrier"],
 
   Helmets: [
     "PASGT Helmet",
@@ -571,6 +571,7 @@ const BLUEPRINT_CATEGORIES = {
   ],
 
   Clothes: [
+    "ADA Assault Pack",
     "ALICE Medium Backpack",
     "Bandana",
     "Balaclava",

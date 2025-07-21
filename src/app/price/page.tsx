@@ -447,9 +447,10 @@ export default function PricePlannerPage() {
     },
     Vests: {
       "6B2 Vest": { "Non-HQ": { "Iron Plate": 10, Cloth: 14 } },
-      "6B3 Vest": { HQ: { Kevlar: 7 } },
+      "6B3 Vest": { HQ: { Kevlar: 5 } },
       "M69 Vest": { "Non-HQ": { "Iron Plate": 10, Cloth: 14 } },
       "PASGT Vest": { "Non-HQ": { "Iron Plate": 10, Cloth: 14 } },
+      "Plate Carrier": { HQ: { Kevlar: 5 } },
     },
     Helmets: {
       "PASGT Helmet": { "Non-HQ": { "Iron Plate": 2, Cloth: 2 } },
@@ -468,6 +469,7 @@ export default function PricePlannerPage() {
       "ZSh-5 Helmet": { "Non-HQ": { "Iron Plate": 7, Cloth: 10 } },
     },
     Clothes: {
+      "ADA Assualt Pack": { "Non-HQ": { Cloth: 32 } },
       "ALICE Medium Backpack": { "Non-HQ": { Cloth: 2 } },
       Bandana: { "Non-HQ": { Cloth: 1 } },
       Balaclava: { "Non-HQ": { Cloth: 1 } },
