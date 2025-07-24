@@ -153,7 +153,7 @@ export default function WeaponCompatibilityPage() {
       ammo: "4.6x40 40rnd Mag",
       fireModes: "Semi, Full",
       attachments:
-        "EOTECH XPS3, Reflex scope, Elcan Specter, and 4.7 mm Flash Hider",
+        "EOTECH XPS3, Reflex scope, Elcan Specter, Vortex RazorHD Gen2, and 4.7 mm Flash Hider",
       type: WEAPON_TYPES.SUBMACHINE,
     },
 
@@ -201,7 +201,7 @@ export default function WeaponCompatibilityPage() {
       ammo: "5.56x45mm 30rnd STANAG Mag",
       fireModes: "Semi, Full",
       attachments:
-        "EOTECH XPS3, Reflex scope, Elcan Specter, Leupold VX-6 and A2 Flash Hider",
+        "EOTECH XPS3, Reflex scope, Elcan Specter, Vortex RazorHD Gen2, Leupold VX-6 and A2 Flash Hider",
       type: WEAPON_TYPES.ASSAULT,
     },
     {
@@ -223,7 +223,7 @@ export default function WeaponCompatibilityPage() {
       ammo: "7.62x51 FMJ 20rnd Mag",
       fireModes: "Semi, Full",
       attachments:
-        "EOTECH XPS3, Reflex scope, Elcan Specter, Leupold VX-6, and 7.62x51mm Flash Hider",
+        "EOTECH XPS3, Reflex scope, Elcan Specter, Vortex RazorHD Gen2, Leupold VX-6, and 7.62x51mm Flash Hider",
       type: WEAPON_TYPES.ASSAULT,
     },
     {
@@ -231,7 +231,7 @@ export default function WeaponCompatibilityPage() {
       ammo: ".300 Blackout Mag",
       fireModes: "Semi, Full",
       attachments:
-        "EOTECH XPS3, Reflex scope, Elcan Specter, Leupold VX-6, and A2 Flash Hider",
+        "EOTECH XPS3, Reflex scope, Elcan Specter, Vortex RazorHD Gen2, Leupold VX-6, and A2 Flash Hider",
       type: WEAPON_TYPES.ASSAULT,
     },
     {
@@ -245,7 +245,7 @@ export default function WeaponCompatibilityPage() {
       weapon: "Steyr AUG",
       ammo: "5.56x45 30rnd AUG Mag",
       fireModes: "Semi, Full",
-      attachments: "EOTECH XPS3, Reflex scope, Elcan Specter, and Leupold VX-6",
+      attachments: "EOTECH XPS3, Reflex scope, Elcan Specter, Vortex RazorHD Gen2, and Leupold VX-6",
       type: WEAPON_TYPES.ASSAULT,
     },
 
@@ -262,11 +262,11 @@ export default function WeaponCompatibilityPage() {
       ammo: "7.62x51 30rnd Mag",
       fireModes: "Semi",
       attachments:
-        "EOTECH XPS3, Reflex scope, Elcan Specter, Leupold VX-6, and 7.62x51mm Flash Hider",
+        "EOTECH XPS3, Reflex scope, Elcan Specter, Vortex RazorHD Gen2, Leupold VX-6, and 7.62x51mm Flash Hider",
       type: WEAPON_TYPES.SNIPER,
     },
     {
-      weapon: "SSG",
+      weapon: "SSG10A2",
       ammo: "5rnd .338 FMJ",
       fireModes: "Semi",
       attachments: "ART II Scope",
@@ -821,6 +821,33 @@ export default function WeaponCompatibilityPage() {
                   className="text-[#e0e0e0] text-sm cursor-pointer"
                 >
                   Elcan
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2 cursor-pointer py-1.5">
+                <input
+                  type="checkbox"
+                  id="vortex"
+                  className="w-[18px] h-[18px] appearance-none border-2 border-[#333] rounded bg-[#1a1a1a] relative cursor-pointer checked:bg-[#00c6ff] checked:border-[#00c6ff] transition-all"
+                  value="vortex"
+                  checked={selectedAttachments.has("vortex")}
+                  onChange={(e) =>
+                    handleAttachmentChange("vortex", e.target.checked)
+                  }
+                  style={{
+                    backgroundImage: selectedAttachments.has("vortex")
+                      ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z'/%3E%3C/svg%3E")`
+                      : "none",
+                    backgroundSize: "70%",
+                    backgroundPosition: "center",
+                    backgroundRepeat: "no-repeat",
+                  }}
+                />
+                <label
+                  htmlFor="vortex"
+                  className="text-[#e0e0e0] text-sm cursor-pointer"
+                >
+                  Vortex RazorHD Gen2
                 </label>
               </div>
 

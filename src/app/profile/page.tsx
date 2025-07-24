@@ -452,7 +452,7 @@ const TOUR_STEPS: TooltipStep[] = [
 ];
 
 // ============================================================================
-// CONSTANTS & TYPES (from original file)
+// CONSTANTS & TYPES
 // ============================================================================
 
 const BLUEPRINT_CATEGORIES = {
@@ -521,6 +521,7 @@ const BLUEPRINT_CATEGORIES = {
     "Leupold VX-6",
     "PSO-1 Scope",
     "Reflex Scope",
+    "Vortex RazorHD Gen2",
     "4x20 Carry Handle Scope",
     "4.7mm FlashHider",
     "6.8x51mm FlashHider",
@@ -555,7 +556,7 @@ const BLUEPRINT_CATEGORIES = {
     "VW Rolf",
   ],
 
-  Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest", "Plate Carrier"],
+  Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest", "Plate Carrier", "TTV-Plate Carrier Rig"],
 
   Helmets: [
     "PASGT Helmet",

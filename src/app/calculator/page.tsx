@@ -485,6 +485,7 @@ export default function CalculatorPage() {
       "Leupold VX-6",
       "PSO-1 Scope",
       "Reflex Scope",
+      "Vortex RazorHD Gen2",
       "4x20 Carry Handle Scope",
       "4.7mm FlashHider",
       "6.8x51mm FlashHider",
@@ -517,7 +518,7 @@ export default function CalculatorPage() {
       "Ural (Device)",
       "VW Rolf",
     ],
-    Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest", "Plate Carrier"],
+    Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest", "Plate Carrier", "TTV-Plate Carrier Rig"],
     Helmets: [
       "PASGT Helmet",
       "PASGT Helmet - Camouflaged",
@@ -702,6 +703,7 @@ export default function CalculatorPage() {
     "Leupold VX-6": 10,
     "PSO-1 Scope": 7,
     "Reflex Scope": 2,
+    "Vortex RazorHD Gen2": 10,
 
     // ========== VEHICLES ==========
     "M1025 Light Armoured Vehicle": 7,
@@ -734,6 +736,7 @@ export default function CalculatorPage() {
     "M69 Vest": 7,
     "PASGT Vest": 7,
     "Plate Carrier": 10,
+    "TTV-Plate Carrier Rig": 10,
 
     // ========== HELMETS ==========
     "PASGT Helmet": 4,
@@ -1209,6 +1212,12 @@ export default function CalculatorPage() {
           "Tempered Glass": 1,
         },
       },
+      "Vortex RazorHD Gen2": {
+        "Non-HQ": {
+          Component: 13,
+          "Tempered Glass": 9,
+        },
+      },
     },
     Vehicles: {
       "M1025 Light Armoured Vehicle": {
@@ -1399,6 +1408,9 @@ export default function CalculatorPage() {
       },
       "Plate Carrier": {
         HQ: { Kevlar: 5 },
+      },
+      "TTV-Plate Carrier Rig": {
+        HQ: { Kevlar: 9 },
       },
     },
     Helmets: {
@@ -1937,6 +1949,7 @@ export default function CalculatorPage() {
     "Leupold VX-6": 50,
     "PSO-1 Scope": 50,
     "Reflex Scope": 50,
+    "Vortex RazorHD Gen2": 50,
 
     // Vehicles
     "M1025 Light Armoured Vehicle": 60,
@@ -1969,6 +1982,7 @@ export default function CalculatorPage() {
     "M69 Vest": 40,
     "PASGT Vest": 40,
     "Plate Carrier": 30,
+    "TTV-Plate Carrier Rig": 30,
 
     // Helmets
     "PASGT Helmet": 40,
@@ -3287,7 +3301,7 @@ export default function CalculatorPage() {
 
             {/* Footer */}
             <div className="text-center mt-8 text-white/50">
-              <p>Updated | July 4, 2025</p>
+              <p>Updated | July 24, 2025</p>
             </div>
           </div>
         </div>

@@ -109,67 +109,73 @@ export function HeroSection() {
             )}
           </div>
 
-          {!hasAccess &&
-            (isClient ? (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.8 }}
-                className="mt-8"
+          {/* Always show button - content changes based on access status */}
+          {isClient ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.8 }}
+              className="mt-8"
+            >
+              <Link
+                href="/whitelist"
+                className="group relative inline-flex items-center justify-center py-4 px-8 rounded-xl font-medium text-lg bg-gradient-to-r from-amber-500 to-yellow-400 text-black transform hover:scale-[1.02] transition-all duration-300 shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:ring-offset-2 focus:ring-offset-slate-900 overflow-hidden"
               >
-                <Link
-                  href="/whitelist"
-                  className="group relative inline-flex items-center justify-center py-4 px-8 rounded-xl font-medium text-lg bg-gradient-to-r from-amber-500 to-yellow-400 text-black transform hover:scale-[1.02] transition-all duration-300 shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:ring-offset-2 focus:ring-offset-slate-900 overflow-hidden"
-                >
-                  {/* Glass overlay base */}
-                  <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-transparent via-white/10 to-white/20"></div>
+                {/* Glass overlay base */}
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-transparent via-white/10 to-white/20"></div>
 
-                  {/* Automatic shine animation */}
-                  <div
-                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent w-full h-full rounded-xl"
-                    style={{
-                      animation: "shine 6s ease-in-out infinite",
-                      transform: "translateX(-100%)",
-                    }}
-                  ></div>
+                {/* Automatic shine animation - enhanced for whitelisted users */}
+                <div
+                  className={`absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent w-full h-full rounded-xl ${
+                    hasAccess ? 'opacity-75' : 'opacity-100'
+                  }`}
+                  style={{
+                    animation: "shine 6s ease-in-out infinite",
+                    transform: "translateX(-100%)",
+                  }}
+                ></div>
 
-                  {/* Top glass highlight */}
-                  <div className="absolute top-0 left-2 right-2 h-[1px] bg-gradient-to-r from-transparent via-white/60 to-transparent"></div>
+                {/* Top glass highlight */}
+                <div className="absolute top-0 left-2 right-2 h-[1px] bg-gradient-to-r from-transparent via-white/60 to-transparent"></div>
 
-                  {/* Content */}
-                  <span className="relative z-10 flex items-center gap-2">
-                    <span className="text-xl">🔓</span>
-                    <span className="font-semibold tracking-wide">
-                      Unlock Plus Features
-                    </span>
+                {/* Content - conditional based on access status */}
+                <span className="relative z-10 flex items-center gap-2">
+                  <span className="text-xl">
+                    {hasAccess ? "👑" : "🔓"}
                   </span>
-                </Link>
-              </motion.div>
-            ) : (
-              <div className="mt-8">
-                <Link
-                  href="/whitelist"
-                  className="group relative inline-flex items-center justify-center py-4 px-8 rounded-xl font-medium text-lg bg-gradient-to-r from-amber-400 to-yellow-500 text-black transform hover:scale-[1.02] transition-all duration-300 shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:ring-offset-2 focus:ring-offset-slate-900 overflow-hidden"
-                >
-                  {/* Glass overlay base */}
-                  <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-transparent via-white/10 to-white/20"></div>
-
-                  {/* Glass shine effect */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-white/20 to-transparent rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-                  {/* Top glass highlight */}
-                  <div className="absolute top-0 left-2 right-2 h-[1px] bg-gradient-to-r from-transparent via-white/60 to-transparent"></div>
-
-                  {/* Content */}
-                  <span className="relative z-10 flex items-center gap-2">
-                    <span className="text-xl">🔓</span>
-                    <span className="font-semibold tracking-wide">
-                      Unlock Plus Features
-                    </span>
+                  <span className="font-semibold tracking-wide">
+                    {hasAccess ? "A-List Plus" : "Unlock Plus Features"}
                   </span>
-                </Link>
-              </div>
-            ))}
+                </span>
+              </Link>
+            </motion.div>
+          ) : (
+            <div className="mt-8">
+              <Link
+                href="/whitelist"
+                className="group relative inline-flex items-center justify-center py-4 px-8 rounded-xl font-medium text-lg bg-gradient-to-r from-amber-400 to-yellow-500 text-black transform hover:scale-[1.02] transition-all duration-300 shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:ring-offset-2 focus:ring-offset-slate-900 overflow-hidden"
+              >
+                {/* Glass overlay base */}
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-transparent via-white/10 to-white/20"></div>
+
+                {/* Glass shine effect */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-white/20 to-transparent rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+                {/* Top glass highlight */}
+                <div className="absolute top-0 left-2 right-2 h-[1px] bg-gradient-to-r from-transparent via-white/60 to-transparent"></div>
+
+                {/* Content - conditional based on access status */}
+                <span className="relative z-10 flex items-center gap-2">
+                  <span className="text-xl">
+                    {hasAccess ? "👑" : "🔓"}
+                  </span>
+                  <span className="font-semibold tracking-wide">
+                    {hasAccess ? "A-List Plus" : "Unlock Plus Features"}
+                  </span>
+                </span>
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </section>

@@ -74,25 +74,104 @@ const PARCEL_STATIONS: ParcelStation[] = [
   { id: 12, name: "Parcel Station 12", gridX: 97, gridZ: 15, x: 9700, z: 1500 }
 ]
 
+// Real travel time data (in seconds, rounded to nearest 5, with ±10s buffer applied)
+const REAL_TRAVEL_TIMES: { [from: number]: { [to: number]: number } } = {
+  1: { 7: 115, 8: 140, 9: 150, 11: 240, 12: 305 },
+  2: { 1: 95, 8: 230, 9: 230, 11: 330, 12: 385 },
+  3: { 4: 90, 5: 65 },
+  4: { 2: 145, 5: 65 },
+  5: { 1: 185, 2: 165, 3: 60, 4: 70, 6: 230, 7: 310, 8: 315, 9: 310, 11: 410, 12: 490 },
+  6: { 1: 60, 7: 90 },
+  7: { 1: 120, 6: 105 },
+  8: { 10: 225 },
+  9: { 1: 140, 8: 105, 11: 105 },
+  10: { 1: 410, 9: 265, 11: 160, 12: 215 },
+  11: { 1: 245, 8: 210, 9: 105, 10: 170, 12: 80 },
+  12: { 1: 310, 2: 425, 4: 445, 5: 470, 9: 170, 10: 240, 11: 75 }
+}
+
 const VEHICLE_CAPACITIES = {
   van: 8,
   standard: 3
 } as const
 
 const STRATEGY_DESCRIPTIONS = {
-  distance: 'Shortest total travel distance',
-  efficiency: 'Prioritize stations with more parcels',
-  balanced: 'Balance distance and parcel density'
+  balanced: 'Will balance shortest distance and parcel efficiency, giving a balance of shortest distance and delivering more parcels per station. This will be the most optimal strategy to take for most users.',
+  distance: 'Will calculate the shortest distance / quickest time to complete the route.',
+  efficiency: 'Will prioritize stations with the most deliveries first. When parcel counts are equal, it switches to a balanced route strategy for optimal efficiency.'
 } as const
 
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
 
-function calculateDistance(station1: ParcelStation, station2: ParcelStation): number {
+function calculateStraightLineDistance(station1: ParcelStation, station2: ParcelStation): number {
   const dx = station1.x - station2.x
   const dz = station1.z - station2.z
   return Math.sqrt(dx * dx + dz * dz)
+}
+
+function getRealTravelTime(fromId: number, toId: number): number {
+  // Check if we have real travel time data
+  const directTime = REAL_TRAVEL_TIMES[fromId]?.[toId]
+  if (directTime) return directTime
+  
+  // Check reverse direction
+  const reverseTime = REAL_TRAVEL_TIMES[toId]?.[fromId]
+  if (reverseTime) return reverseTime
+  
+  // Fallback to estimated time based on straight-line distance
+  const fromStation = PARCEL_STATIONS.find(s => s.id === fromId)!
+  const toStation = PARCEL_STATIONS.find(s => s.id === toId)!
+  const straightLineDistance = calculateStraightLineDistance(fromStation, toStation)
+  
+  // Estimate: assume average speed of 60 km/h, convert meters to seconds
+  // Distance in meters / (60000 m/min) * 60 s/min = time in seconds
+  return Math.round((straightLineDistance / 1000) * 60) // Rough estimation
+}
+
+function twoOptImprovement(route: ParcelStation[]): ParcelStation[] {
+  if (route.length < 4) return route
+  
+  let improved = true
+  let bestRoute = [...route]
+  let iterations = 0
+  const maxIterations = 100 // Prevent infinite loops
+  
+  while (improved && iterations < maxIterations) {
+    improved = false
+    iterations++
+    
+    for (let i = 1; i < bestRoute.length - 2; i++) {
+      for (let j = i + 1; j < bestRoute.length; j++) {
+        if (j - i === 1) continue // Skip adjacent edges
+        
+        const newRoute = twoOptSwap(bestRoute, i, j)
+        
+        if (calculateTotalRouteTime(newRoute) < calculateTotalRouteTime(bestRoute)) {
+          bestRoute = newRoute
+          improved = true
+        }
+      }
+    }
+  }
+  
+  return bestRoute
+}
+
+function twoOptSwap(route: ParcelStation[], i: number, j: number): ParcelStation[] {
+  const newRoute = [...route]
+  const segment = newRoute.slice(i, j + 1).reverse()
+  newRoute.splice(i, j - i + 1, ...segment)
+  return newRoute
+}
+
+function calculateTotalRouteTime(stations: ParcelStation[]): number {
+  let totalTime = 0
+  for (let i = 0; i < stations.length - 1; i++) {
+    totalTime += getRealTravelTime(stations[i].id, stations[i + 1].id)
+  }
+  return totalTime
 }
 
 function optimizeRoute(
@@ -109,12 +188,12 @@ function optimizeRoute(
   const capacity = VEHICLE_CAPACITIES[settings.vehicleType]
   let unvisited = [...deliveryStations]
   let currentPos = currentStation
-  let totalDistance = 0
+  let totalTime = 0
   const trips: RouteResult['trips'] = []
   
   while (unvisited.length > 0) {
     const trip: RouteResult['trips'][0] = { stations: [], parcels: 0, distance: 0 }
-    let tripDistance = 0
+    let tripTime = 0
     let currentTripPos = currentPos
     
     // Fill this trip up to capacity
@@ -122,25 +201,31 @@ function optimizeRoute(
       let nextStation: ParcelStation
       
       if (settings.strategy === 'distance') {
-        // Nearest neighbor approach
+        // Shortest time/distance approach
         nextStation = unvisited.reduce((nearest, station) => {
-          const distToStation = calculateDistance(currentTripPos, station)
-          const distToNearest = calculateDistance(currentTripPos, nearest)
-          return distToStation < distToNearest ? station : nearest
+          const timeToStation = getRealTravelTime(currentTripPos.id, station.id)
+          const timeToNearest = getRealTravelTime(currentTripPos.id, nearest.id)
+          return timeToStation < timeToNearest ? station : nearest
         })
       } else if (settings.strategy === 'efficiency') {
-        // Prioritize stations with more parcels
+        // Prioritize stations with more parcels (most deliveries first)
         nextStation = unvisited.reduce((best, station) => {
           const stationJob = workingDeliveries.find(job => job.stationId === station.id)!
           const bestJob = workingDeliveries.find(job => job.stationId === best.id)!
           
+          // First priority: higher parcel count
           if (stationJob.parcelCount > bestJob.parcelCount) return station
           if (stationJob.parcelCount < bestJob.parcelCount) return best
           
-          // If tied, choose closer one
-          const distToStation = calculateDistance(currentTripPos, station)
-          const distToBest = calculateDistance(currentTripPos, best)
-          return distToStation < distToBest ? station : best
+          // If parcel counts are equal, use balanced strategy as fallback
+          const timeToStation = getRealTravelTime(currentTripPos.id, station.id)
+          const timeToBest = getRealTravelTime(currentTripPos.id, best.id)
+          
+          // Balanced fallback: combine parcel count and inverse time
+          const stationScore = stationJob.parcelCount * 100 - timeToStation / 10
+          const bestScore = bestJob.parcelCount * 100 - timeToBest / 10
+          
+          return stationScore > bestScore ? station : best
         })
       } else {
         // Balanced approach
@@ -148,12 +233,12 @@ function optimizeRoute(
           const stationJob = workingDeliveries.find(job => job.stationId === station.id)!
           const bestJob = workingDeliveries.find(job => job.stationId === best.id)!
           
-          const distToStation = calculateDistance(currentTripPos, station)
-          const distToBest = calculateDistance(currentTripPos, best)
+          const timeToStation = getRealTravelTime(currentTripPos.id, station.id)
+          const timeToBest = getRealTravelTime(currentTripPos.id, best.id)
           
-          // Score combines parcels and inverse distance
-          const stationScore = stationJob.parcelCount * 100 - distToStation / 10
-          const bestScore = bestJob.parcelCount * 100 - distToBest / 10
+          // Score combines parcels and inverse time (higher is better)
+          const stationScore = stationJob.parcelCount * 100 - timeToStation / 10
+          const bestScore = bestJob.parcelCount * 100 - timeToBest / 10
           
           return stationScore > bestScore ? station : best
         })
@@ -162,12 +247,12 @@ function optimizeRoute(
       const jobForStation = workingDeliveries.find(job => job.stationId === nextStation.id)!
       const parcelsToTake = Math.min(jobForStation.parcelCount, capacity - trip.parcels)
       
-      const distanceToNext = calculateDistance(currentTripPos, nextStation)
-      tripDistance += distanceToNext
+      const timeToNext = getRealTravelTime(currentTripPos.id, nextStation.id)
+      tripTime += timeToNext
       
       trip.stations.push(nextStation)
       trip.parcels += parcelsToTake
-      trip.distance = tripDistance
+      trip.distance = tripTime // Using time as "distance" now
       
       // Update remaining parcels for this job (working copy only)
       jobForStation.parcelCount -= parcelsToTake
@@ -178,17 +263,25 @@ function optimizeRoute(
       currentTripPos = nextStation
     }
     
+    // Apply 2-opt optimization to this trip if it has multiple stations
+    if (trip.stations.length > 2) {
+      const optimizedStations = twoOptImprovement([currentPos, ...trip.stations])
+      trip.stations = optimizedStations.slice(1) // Remove the starting position
+      trip.distance = calculateTotalRouteTime(optimizedStations)
+    }
+    
     trips.push(trip)
-    totalDistance += tripDistance
+    totalTime += tripTime
   }
   
-  // Estimate time (assuming 60 km/h average speed, distance in meters)
-  const estimatedTime = Math.round((totalDistance / 1000) / 60 * 60) // minutes
+  // Convert time to estimated distance (for display purposes)
+  // Assume average speed of 60 km/h
+  const estimatedDistance = Math.round((totalTime / 60) * 1000) // Convert seconds to meters
   
   return {
     stations: deliveryStations,
-    totalDistance: Math.round(totalDistance),
-    estimatedTime,
+    totalDistance: estimatedDistance,
+    estimatedTime: Math.round(totalTime / 60), // Convert to minutes
     trips
   }
 }
@@ -242,6 +335,18 @@ export default function ParcelRoutePlanner() {
         )
       )
     }
+  }
+
+  const handleParcelIncrement = (stationId: number, increment: number) => {
+    setDeliveries(prev => 
+      prev.map(job => {
+        if (job.stationId === stationId) {
+          const newCount = Math.max(1, Math.min(50, job.parcelCount + increment))
+          return { ...job, parcelCount: newCount }
+        }
+        return job
+      }).filter(job => job.parcelCount > 0)
+    )
   }
   
   const handleDelivered = (stationId: number) => {
@@ -380,9 +485,9 @@ export default function ParcelRoutePlanner() {
                       }))}
                       className="w-full bg-background-tertiary border border-white/20 rounded-lg px-3 py-2 text-white focus:border-primary-500 focus:outline-none"
                     >
+                      <option value="balanced">Balanced Route</option>
                       <option value="distance">Shortest Distance</option>
                       <option value="efficiency">Parcel Efficiency</option>
-                      <option value="balanced">Balanced Route</option>
                     </select>
                   </div>
                 </div>
@@ -428,14 +533,30 @@ export default function ParcelRoutePlanner() {
                           <div className="mt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-2">
                               <label className="text-white/70 text-sm">Parcels:</label>
-                              <input
-                                type="number"
-                                min="1"
-                                max="50"
-                                value={delivery.parcelCount}
-                                onChange={(e) => handleParcelCountChange(station.id, Number(e.target.value))}
-                                className="w-16 bg-background-tertiary border border-white/20 rounded px-2 py-1 text-white text-sm focus:border-primary-500 focus:outline-none"
-                              />
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleParcelIncrement(station.id, -1)}
+                                  className="w-6 h-6 bg-red-600 hover:bg-red-700 text-white text-xs rounded flex items-center justify-center transition-colors duration-200"
+                                  disabled={delivery.parcelCount <= 1}
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="50"
+                                  value={delivery.parcelCount}
+                                  onChange={(e) => handleParcelCountChange(station.id, Number(e.target.value))}
+                                  className="w-16 bg-background-tertiary border border-white/20 rounded px-2 py-1 text-white text-sm focus:border-primary-500 focus:outline-none text-center"
+                                />
+                                <button
+                                  onClick={() => handleParcelIncrement(station.id, 1)}
+                                  className="w-6 h-6 bg-green-600 hover:bg-green-700 text-white text-xs rounded flex items-center justify-center transition-colors duration-200"
+                                  disabled={delivery.parcelCount >= 50}
+                                >
+                                  +
+                                </button>
+                              </div>
                             </div>
                             <button
                               onClick={() => handleDelivered(station.id)}
@@ -544,15 +665,15 @@ export default function ParcelRoutePlanner() {
                     <div className="grid grid-cols-2 gap-4 mb-6">
                       <div className="bg-white/5 rounded-lg p-3 text-center">
                         <div className="text-2xl font-bold text-primary-500 mb-1">
-                          {(routeResult.totalDistance / 1000).toFixed(1)}km
+                          {Math.round(routeResult.estimatedTime)}min
                         </div>
-                        <div className="text-white/60 text-sm">Total Distance</div>
+                        <div className="text-white/60 text-sm">Total Time</div>
                       </div>
                       <div className="bg-white/5 rounded-lg p-3 text-center">
                         <div className="text-2xl font-bold text-primary-500 mb-1">
-                          {routeResult.estimatedTime}min
+                          {routeResult.trips.length}
                         </div>
-                        <div className="text-white/60 text-sm">Est. Time</div>
+                        <div className="text-white/60 text-sm">Trips</div>
                       </div>
                     </div>
                     
@@ -564,7 +685,7 @@ export default function ParcelRoutePlanner() {
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-white font-medium">Trip {index + 1}</span>
                             <span className="text-primary-500 text-sm">
-                              {trip.parcels} parcels • {(trip.distance / 1000).toFixed(1)}km
+                              {trip.parcels} parcels • {Math.round(trip.distance / 60)}min
                             </span>
                           </div>
                           <div className="flex items-center gap-2 text-white/70 text-sm">

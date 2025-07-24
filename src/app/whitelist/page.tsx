@@ -7,6 +7,7 @@ import { usePageTracking } from "@/hooks/usePageTracking";
 import { createClient } from "@/lib/supabase/client";
 import { getDiscordId } from "@/lib/utils";
 import { withTimeout } from "@/lib/timeout";
+import { CopyLinkButton } from "@/components/ui/CopyLinkButton";
 
 // Configuration
 const DISCOUNT_ENABLED = false;
@@ -177,7 +178,7 @@ export default function WhitelistPage() {
           type: "error",
           message: "❌ Please enter your in-game name.",
         });
-        const ignInput = document.getElementById('ign') as HTMLInputElement;
+        const ignInput = document.getElementById("ign") as HTMLInputElement;
         if (ignInput) {
           ignInput.focus();
         }
@@ -201,7 +202,10 @@ export default function WhitelistPage() {
       }
 
       setIsSubmitting(true);
-      setStatusMessage({ type: "info", message: "🔄 Submitting your request..." });
+      setStatusMessage({
+        type: "info",
+        message: "🔄 Submitting your request...",
+      });
 
       try {
         const discordId = getDiscordId(user);
@@ -223,7 +227,9 @@ export default function WhitelistPage() {
         const token = sessionData.session?.access_token;
 
         if (!token) {
-          throw new Error("Authentication token not found. Please log in again.");
+          throw new Error(
+            "Authentication token not found. Please log in again."
+          );
         }
 
         const response = await withTimeout(
@@ -249,14 +255,16 @@ export default function WhitelistPage() {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Server error: ${response.status}`);
+          throw new Error(
+            errorData.error || `Server error: ${response.status}`
+          );
         }
 
         setStatusMessage({
           type: "success",
           message: "✅ Trial activated! You now have 7 days of premium access.",
         });
-        
+
         setIgn("");
         setReferral("");
 
@@ -265,19 +273,22 @@ export default function WhitelistPage() {
         }, 2500);
       } catch (error) {
         console.error("Error submitting whitelist request:", error);
-        
-        let errorMessage = "❌ An unexpected error occurred. Please try again later.";
-        
+
+        let errorMessage =
+          "❌ An unexpected error occurred. Please try again later.";
+
         if (error instanceof Error) {
           if (error.message.includes("timeout")) {
-            errorMessage = "❌ Request timeout. Please check your connection and try again.";
+            errorMessage =
+              "❌ Request timeout. Please check your connection and try again.";
           } else if (error.message.includes("Discord ID")) {
-            errorMessage = "❌ Authentication error. Please log out and log in again.";
+            errorMessage =
+              "❌ Authentication error. Please log out and log in again.";
           } else {
             errorMessage = `❌ ${error.message}`;
           }
         }
-        
+
         setStatusMessage({
           type: "error",
           message: errorMessage,
@@ -289,37 +300,43 @@ export default function WhitelistPage() {
     [ign, referral, user, supabase]
   );
 
-  const handleIgnChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setIgn(value);
-    
-    if (statusMessage.type === "error" && value.trim()) {
-      setStatusMessage({ type: null, message: "" });
-    }
-  }, [statusMessage.type]);
+  const handleIgnChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setIgn(value);
 
-  const handleReferralChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setReferral(e.target.value);
-  }, []);
+      if (statusMessage.type === "error" && value.trim()) {
+        setStatusMessage({ type: null, message: "" });
+      }
+    },
+    [statusMessage.type]
+  );
+
+  const handleReferralChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setReferral(e.target.value);
+    },
+    []
+  );
 
   // Keyboard navigation for modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showReferralModal) {
+      if (e.key === "Escape" && showReferralModal) {
         setShowReferralModal(false);
       }
     };
 
     if (showReferralModal) {
-      document.addEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'hidden';
+      document.addEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     }
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'unset';
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "unset";
     };
   }, [showReferralModal]);
 
@@ -423,14 +440,14 @@ export default function WhitelistPage() {
     if (!showReferralModal) return null;
 
     return (
-      <div 
+      <div
         className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm bg-black/60 animate-fade-in"
         onClick={() => setShowReferralModal(false)}
         role="dialog"
         aria-modal="true"
         aria-labelledby="referral-modal-title"
       >
-        <div 
+        <div
           className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-[#0c0c0c] via-[#1a1a2e] to-[#16213e] border border-[#ffd700]/30 rounded-3xl shadow-2xl animate-scale-in"
           onClick={(e) => e.stopPropagation()}
         >
@@ -440,14 +457,19 @@ export default function WhitelistPage() {
             className="absolute top-4 right-4 z-10 w-10 h-10 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center transition-all duration-300 group focus:outline-none focus:ring-2 focus:ring-[#ffd700]"
             aria-label="Close referral program modal"
           >
-            <svg 
-              className="w-5 h-5 text-white/70 group-hover:text-white transition-colors" 
-              fill="none" 
-              stroke="currentColor" 
+            <svg
+              className="w-5 h-5 text-white/70 group-hover:text-white transition-colors"
+              fill="none"
+              stroke="currentColor"
               viewBox="0 0 24 24"
               aria-hidden="true"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
 
@@ -455,7 +477,10 @@ export default function WhitelistPage() {
           <div className="p-6 sm:p-8 border-b border-white/10">
             <div className="text-center">
               <div className="text-5xl sm:text-6xl mb-4 animate-bounce">🤝</div>
-              <h2 id="referral-modal-title" className="text-3xl sm:text-4xl font-black mb-4 bg-gradient-to-r from-[#ffd700] via-[#ffed4e] to-[#ffc400] bg-clip-text text-transparent">
+              <h2
+                id="referral-modal-title"
+                className="text-3xl sm:text-4xl font-black mb-4 bg-gradient-to-r from-[#ffd700] via-[#ffed4e] to-[#ffc400] bg-clip-text text-transparent"
+              >
                 A-List Hub Referral Program
               </h2>
               <p className="text-white/80 text-lg sm:text-xl">
@@ -474,15 +499,33 @@ export default function WhitelistPage() {
               </h3>
               <div className="bg-gradient-to-r from-[#ffd700]/10 to-purple-500/10 border border-[#ffd700]/30 rounded-2xl p-6">
                 <p className="text-white/90 text-lg leading-relaxed mb-4">
-                  Refer someone to the <strong className="text-[#ffd700]">A-List Hub</strong>, and you'll earn{" "}
-                  <strong className="text-green-400">10% of the current sale price</strong> once they purchase{" "}
-                  <strong className="text-[#ffd700]">premium lifetime features</strong>.
+                  Refer someone to the{" "}
+                  <strong className="text-[#ffd700]">A-List Hub</strong>, and
+                  you'll earn{" "}
+                  <strong className="text-green-400">
+                    10% of the current sale price
+                  </strong>{" "}
+                  once they purchase{" "}
+                  <strong className="text-[#ffd700]">
+                    premium lifetime features
+                  </strong>
+                  .
                 </p>
                 <div className="bg-black/30 rounded-xl p-4 border border-white/10">
                   <p className="text-white/70 text-sm mb-2">Example:</p>
                   <div className="space-y-1">
-                    <p className="text-white">Premium Price: <span className="text-[#ffd700] font-bold">ELAN$2,500,000</span></p>
-                    <p className="text-white">You Receive: <span className="text-green-400 font-bold">ELAN$250,000</span></p>
+                    <p className="text-white">
+                      Premium Price:{" "}
+                      <span className="text-[#ffd700] font-bold">
+                        ELAN$2,500,000
+                      </span>
+                    </p>
+                    <p className="text-white">
+                      You Receive:{" "}
+                      <span className="text-green-400 font-bold">
+                        ELAN$250,000
+                      </span>
+                    </p>
                   </div>
                 </div>
               </div>
@@ -496,12 +539,20 @@ export default function WhitelistPage() {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-xl p-4">
-                  <p className="text-green-300 font-semibold mb-2">During Trial</p>
-                  <p className="text-white/80 text-sm">Get rewarded when they purchase during their trial period</p>
+                  <p className="text-green-300 font-semibold mb-2">
+                    During Trial
+                  </p>
+                  <p className="text-white/80 text-sm">
+                    Get rewarded when they purchase during their trial period
+                  </p>
                 </div>
                 <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl p-4">
-                  <p className="text-blue-300 font-semibold mb-2">After Trial</p>
-                  <p className="text-white/80 text-sm">Still get rewarded even if they purchase later</p>
+                  <p className="text-blue-300 font-semibold mb-2">
+                    After Trial
+                  </p>
+                  <p className="text-white/80 text-sm">
+                    Still get rewarded even if they purchase later
+                  </p>
                 </div>
               </div>
             </section>
@@ -515,13 +566,48 @@ export default function WhitelistPage() {
               <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-2xl p-6">
                 <p className="text-white/90 text-lg leading-relaxed">
                   To help the A-List Hub Staff track referrals smoothly,{" "}
-                  <strong className="text-blue-300">have your referral enter your name in the "Referred By" section</strong>{" "}
-                  of the <strong className="text-[#ffd700]">whitelist request form</strong> when starting their trial.
+                  <strong className="text-blue-300">
+                    have your referral enter your name in the "Referred By"
+                    section
+                  </strong>{" "}
+                  of the{" "}
+                  <strong className="text-[#ffd700]">
+                    whitelist request form
+                  </strong>{" "}
+                  when starting their trial.
                 </p>
                 <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
                   <p className="text-yellow-300 font-semibold text-sm">
                     ⚠️ This step is crucial to ensure you're credited properly.
                   </p>
+                </div>
+              </div>
+            </section>
+
+            {/* Share Link Section */}
+            <section>
+              <h3 className="text-2xl font-bold text-[#ffd700] mb-4 flex items-center gap-3">
+                <span className="text-3xl">🔗</span>
+                Share A-List Hub
+              </h3>
+              <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/30 rounded-2xl p-6">
+                <p className="text-white/90 text-lg leading-relaxed mb-6">
+                  Share the A-List Hub whitelist page with your friends and
+                  start earning rewards through our referral program!
+                </p>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <CopyLinkButton />
+
+                  <div className="text-white/70 text-sm">
+                    <p className="font-semibold text-emerald-300 mb-1">
+                      💡 Pro Tip:
+                    </p>
+                    <p>
+                      Share this link anywhere - Discord, social media, or
+                      directly with friends!
+                    </p>
+                  </div>
                 </div>
               </div>
             </section>
@@ -534,7 +620,7 @@ export default function WhitelistPage() {
               </h3>
               <div className="space-y-4">
                 {REFERRAL_MILESTONES.map((milestone, index) => (
-                  <div 
+                  <div
                     key={index}
                     className={`relative p-4 sm:p-6 rounded-2xl border-2 transition-all duration-300 hover:scale-105 ${
                       milestone.type === "feature"
@@ -546,39 +632,50 @@ export default function WhitelistPage() {
                   >
                     <div className="flex items-center justify-between flex-wrap gap-4">
                       <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${
-                          milestone.type === "feature"
-                            ? "bg-purple-500 text-white"
-                            : milestone.type === "ongoing"
-                            ? "bg-green-500 text-white"
-                            : "bg-[#ffd700] text-black"
-                        }`}>
+                        <div
+                          className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${
+                            milestone.type === "feature"
+                              ? "bg-purple-500 text-white"
+                              : milestone.type === "ongoing"
+                              ? "bg-green-500 text-white"
+                              : "bg-[#ffd700] text-black"
+                          }`}
+                        >
                           {milestone.count}
                         </div>
                         <div>
                           <p className="text-white font-semibold text-lg">
                             {milestone.count} Referrals
                           </p>
-                          <p className={`font-bold text-xl ${
-                            milestone.type === "feature" ? "text-purple-300" :
-                            milestone.type === "ongoing" ? "text-green-300" : "text-[#ffd700]"
-                          }`}>
+                          <p
+                            className={`font-bold text-xl ${
+                              milestone.type === "feature"
+                                ? "text-purple-300"
+                                : milestone.type === "ongoing"
+                                ? "text-green-300"
+                                : "text-[#ffd700]"
+                            }`}
+                          >
                             {milestone.reward}
                           </p>
                         </div>
                       </div>
                       {milestone.type === "ongoing" && (
                         <div className="bg-green-500/20 px-3 py-1 rounded-full">
-                          <span className="text-green-300 text-sm font-semibold">Ongoing</span>
+                          <span className="text-green-300 text-sm font-semibold">
+                            Ongoing
+                          </span>
                         </div>
                       )}
                       {milestone.type === "feature" && (
                         <div className="bg-purple-500/20 px-3 py-1 rounded-full">
-                          <span className="text-purple-300 text-sm font-semibold">Special</span>
+                          <span className="text-purple-300 text-sm font-semibold">
+                            Special
+                          </span>
                         </div>
                       )}
                     </div>
-                    
+
                     {milestone.type === "ongoing" && (
                       <div className="mt-3 text-green-300/80 text-sm">
                         Every verified referral after 20 earns you ELAN$500,000!
@@ -592,9 +689,12 @@ export default function WhitelistPage() {
             {/* Call to Action */}
             <section className="text-center">
               <div className="bg-gradient-to-r from-[#ffd700]/20 to-orange-500/20 border border-[#ffd700]/40 rounded-2xl p-6 sm:p-8">
-                <h3 className="text-2xl font-bold text-[#ffd700] mb-4">Ready to Start Earning?</h3>
+                <h3 className="text-2xl font-bold text-[#ffd700] mb-4">
+                  Ready to Start Earning?
+                </h3>
                 <p className="text-white/90 text-lg mb-6 leading-relaxed">
-                  Share your IGN with friends and start earning rewards when they join the A-List Hub community!
+                  Share your IGN with friends and start earning rewards when
+                  they join the A-List Hub community!
                 </p>
                 <button
                   onClick={() => setShowReferralModal(false)}
@@ -738,8 +838,8 @@ export default function WhitelistPage() {
                       </h4>
                       <p className="text-white/90 text-sm sm:text-base leading-relaxed break-words">
                         Upon form submission, you will be granted a{" "}
-                        <strong className="text-blue-300">7-day trial</strong> to
-                        enjoy the features while we process your request.
+                        <strong className="text-blue-300">7-day trial</strong>{" "}
+                        to enjoy the features while we process your request.
                       </p>
                     </div>
                   </div>
@@ -763,11 +863,12 @@ export default function WhitelistPage() {
                     <div className="mb-6 sm:mb-8">
                       <StatusMessage status={userStatus} />
 
-                      {userStatus.showCountdown && userData?.trial_expiration && (
-                        <CountdownTimer
-                          expirationTime={userData.trial_expiration}
-                        />
-                      )}
+                      {userStatus.showCountdown &&
+                        userData?.trial_expiration && (
+                          <CountdownTimer
+                            expirationTime={userData.trial_expiration}
+                          />
+                        )}
                     </div>
                   )}
 
@@ -792,7 +893,9 @@ export default function WhitelistPage() {
                             fill="currentColor"
                           />
                         </svg>
-                        <span className="break-words">Connect with Discord</span>
+                        <span className="break-words">
+                          Connect with Discord
+                        </span>
                       </button>
                     </div>
                   ) : userStatus?.showForm ? (
@@ -806,7 +909,8 @@ export default function WhitelistPage() {
                           htmlFor="ign"
                           className="block text-white/90 font-semibold text-base sm:text-lg mb-3"
                         >
-                          🎮 In-Game Name <span className="text-red-400">*</span>
+                          🎮 In-Game Name{" "}
+                          <span className="text-red-400">*</span>
                         </label>
                         <input
                           type="text"
@@ -820,14 +924,22 @@ export default function WhitelistPage() {
                           maxLength={50}
                           autoComplete="username"
                           aria-describedby="ign-error"
-                          aria-invalid={statusMessage.type === "error" && statusMessage.message.includes("in-game name")}
+                          aria-invalid={
+                            statusMessage.type === "error" &&
+                            statusMessage.message.includes("in-game name")
+                          }
                           className="w-full p-4 sm:p-5 rounded-xl border-2 border-white/20 bg-black/40 text-white text-base sm:text-lg backdrop-blur-xl focus:outline-none focus:border-[#ffd700] focus:ring-4 focus:ring-[#ffd700]/20 transition-all duration-300 placeholder-white/50 invalid:border-red-500/50"
                         />
-                        {statusMessage.type === "error" && statusMessage.message.includes("in-game name") && (
-                          <div id="ign-error" className="mt-2 text-red-400 text-sm" role="alert">
-                            {statusMessage.message}
-                          </div>
-                        )}
+                        {statusMessage.type === "error" &&
+                          statusMessage.message.includes("in-game name") && (
+                            <div
+                              id="ign-error"
+                              className="mt-2 text-red-400 text-sm"
+                              role="alert"
+                            >
+                              {statusMessage.message}
+                            </div>
+                          )}
                       </div>
 
                       <div>
@@ -857,13 +969,20 @@ export default function WhitelistPage() {
                         type="submit"
                         disabled={isSubmitting || !ign.trim()}
                         className="group relative w-full py-4 sm:py-6 px-6 sm:px-8 bg-gradient-to-r from-[#ffd700] via-[#ffed4e] to-[#ffd700] text-black font-black text-lg sm:text-xl uppercase tracking-wider rounded-2xl shadow-2xl hover:shadow-[#ffd700]/25 transition-all duration-300 transform hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden focus:outline-none focus:ring-4 focus:ring-[#ffd700]/30"
-                        aria-label={isSubmitting ? "Submitting trial request" : "Submit trial request"}
+                        aria-label={
+                          isSubmitting
+                            ? "Submitting trial request"
+                            : "Submit trial request"
+                        }
                       >
                         <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:animate-shimmer"></span>
                         <span className="relative z-10 flex items-center justify-center gap-3 flex-wrap">
                           {isSubmitting ? (
                             <>
-                              <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-t-2 border-b-2 border-black" aria-hidden="true"></div>
+                              <div
+                                className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-t-2 border-b-2 border-black"
+                                aria-hidden="true"
+                              ></div>
                               <span>Activating Trial...</span>
                             </>
                           ) : (
@@ -899,26 +1018,36 @@ export default function WhitelistPage() {
                     <div className="text-center py-8 sm:py-12">
                       {userStatus?.type === "whitelisted" && (
                         <div className="space-y-4">
-                          <div className="text-5xl sm:text-6xl mb-4" aria-hidden="true">🎉</div>
+                          <div
+                            className="text-5xl sm:text-6xl mb-4"
+                            aria-hidden="true"
+                          >
+                            🎉
+                          </div>
                           <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
                             Welcome to A-List Plus!
                           </h3>
                           <p className="text-white/90 text-base sm:text-lg break-words">
-                            You already have full access to all premium features.
-                            Enjoy your exclusive experience!
+                            You already have full access to all premium
+                            features. Enjoy your exclusive experience!
                           </p>
                         </div>
                       )}
 
                       {userStatus?.type === "whitelisted_trial" && (
                         <div className="space-y-4">
-                          <div className="text-5xl sm:text-6xl mb-4" aria-hidden="true">⏳</div>
+                          <div
+                            className="text-5xl sm:text-6xl mb-4"
+                            aria-hidden="true"
+                          >
+                            ⏳
+                          </div>
                           <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
                             Trial Active!
                           </h3>
                           <p className="text-white/90 text-base sm:text-lg break-words">
-                            You have full access during your trial period. A staff
-                            member will contact you soon to complete your
+                            You have full access during your trial period. A
+                            staff member will contact you soon to complete your
                             purchase.
                           </p>
                         </div>
@@ -926,7 +1055,12 @@ export default function WhitelistPage() {
 
                       {userStatus?.type === "active_trial" && (
                         <div className="space-y-4">
-                          <div className="text-5xl sm:text-6xl mb-4" aria-hidden="true">⏳</div>
+                          <div
+                            className="text-5xl sm:text-6xl mb-4"
+                            aria-hidden="true"
+                          >
+                            ⏳
+                          </div>
                           <h3 className="text-xl sm:text-2xl font-bold text-[#ffd700] mb-2">
                             Trial in Progress
                           </h3>
@@ -939,13 +1073,18 @@ export default function WhitelistPage() {
 
                       {userStatus?.type === "expired_trial" && (
                         <div className="space-y-4">
-                          <div className="text-5xl sm:text-6xl mb-4" aria-hidden="true">⏰</div>
+                          <div
+                            className="text-5xl sm:text-6xl mb-4"
+                            aria-hidden="true"
+                          >
+                            ⏰
+                          </div>
                           <h3 className="text-xl sm:text-2xl font-bold text-red-400 mb-2">
                             Trial Expired
                           </h3>
                           <p className="text-white/90 text-base sm:text-lg break-words">
-                            Your trial has expired. Please contact a staff member
-                            to complete your purchase and regain access.
+                            Your trial has expired. Please contact a staff
+                            member to complete your purchase and regain access.
                           </p>
                         </div>
                       )}
@@ -967,7 +1106,9 @@ export default function WhitelistPage() {
             <div className="absolute -inset-2 bg-[#ffd700]/30 rounded-full animate-ping"></div>
             <div className="relative flex items-center gap-2">
               <span className="text-2xl group-hover:animate-pulse">🤝</span>
-              <span className="hidden sm:inline font-bold text-lg">Referrals</span>
+              <span className="hidden sm:inline font-bold text-lg">
+                Referrals
+              </span>
             </div>
           </div>
         </button>
@@ -1066,7 +1207,8 @@ export default function WhitelistPage() {
         }
 
         @keyframes bounce-subtle {
-          0%, 100% {
+          0%,
+          100% {
             transform: translateY(0);
           }
           50% {

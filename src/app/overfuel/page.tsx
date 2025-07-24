@@ -168,7 +168,7 @@ export default function OverFuelPage() {
           <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-[#00c6ff] to-[#0072ff] inline-block text-transparent bg-clip-text mb-2">
             OverFuel+
           </h1>
-          <p className="text-white/70 text-lg mt-2">Complete station directory and route planning</p>
+          <p className="text-white/70 text-lg mt-2">Complete station directory</p>
         </header>
 
         {/* Stats Grid */}
