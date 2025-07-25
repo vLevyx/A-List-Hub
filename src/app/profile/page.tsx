@@ -556,7 +556,7 @@ const BLUEPRINT_CATEGORIES = {
     "VW Rolf",
   ],
 
-  Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest", "Plate Carrier", "TTV-Plate Carrier Rig"],
+  Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest", "Plate Carrier", "TTV110"],
 
   Helmets: [
     "PASGT Helmet",

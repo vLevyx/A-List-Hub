@@ -518,7 +518,7 @@ export default function CalculatorPage() {
       "Ural (Device)",
       "VW Rolf",
     ],
-    Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest", "Plate Carrier", "TTV-Plate Carrier Rig"],
+    Vests: ["6B2 Vest", "6B3 Vest", "M69 Vest", "PASGT Vest", "Plate Carrier", "TTV110"],
     Helmets: [
       "PASGT Helmet",
       "PASGT Helmet - Camouflaged",
@@ -736,7 +736,7 @@ export default function CalculatorPage() {
     "M69 Vest": 7,
     "PASGT Vest": 7,
     "Plate Carrier": 10,
-    "TTV-Plate Carrier Rig": 10,
+    "TTV110": 10,
 
     // ========== HELMETS ==========
     "PASGT Helmet": 4,
@@ -1409,7 +1409,7 @@ export default function CalculatorPage() {
       "Plate Carrier": {
         HQ: { Kevlar: 5 },
       },
-      "TTV-Plate Carrier Rig": {
+      "TTV110": {
         HQ: { Kevlar: 9 },
       },
     },
@@ -1982,7 +1982,7 @@ export default function CalculatorPage() {
     "M69 Vest": 40,
     "PASGT Vest": 40,
     "Plate Carrier": 30,
-    "TTV-Plate Carrier Rig": 30,
+    "TTV110": 30,
 
     // Helmets
     "PASGT Helmet": 40,

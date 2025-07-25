@@ -455,7 +455,7 @@ export default function PricePlannerPage() {
       "M69 Vest": { "Non-HQ": { "Iron Plate": 10, Cloth: 14 } },
       "PASGT Vest": { "Non-HQ": { "Iron Plate": 10, Cloth: 14 } },
       "Plate Carrier": { HQ: { Kevlar: 5 } },
-      "TTV-Plate Carrier Rig": { HQ: { Kevlar: 9 } },
+      "TTV110": { HQ: { Kevlar: 9 } },
     },
     Helmets: {
       "PASGT Helmet": { "Non-HQ": { "Iron Plate": 2, Cloth: 2 } },
