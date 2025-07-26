@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getDiscordId } from "@/lib/utils";
 import { withTimeout } from "@/lib/timeout";
 import { CopyLinkButton } from "@/components/ui/CopyLinkButton";
+import { ReferralSelector } from "@/components/ui/ReferralSelector";
 
 // Configuration
 const DISCOUNT_ENABLED = false;
@@ -45,6 +46,7 @@ export default function WhitelistPage() {
   // Form state
   const [ign, setIgn] = useState("");
   const [referral, setReferral] = useState("");
+  const [referralDiscordId, setReferralDiscordId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{
     type: "success" | "error" | "info" | "warning" | null;
@@ -60,61 +62,73 @@ export default function WhitelistPage() {
   const [showReferralModal, setShowReferralModal] = useState(false);
 
   const fetchUserData = async () => {
-    setIsLoading(true);
+  setIsLoading(true);
 
-    if (!user) {
-      setUserStatus({
-        type: "not_logged_in",
-        showForm: false,
-        showCountdown: false,
-      });
-      setIsLoading(false);
-      return;
-    }
+  if (!user) {
+    setUserStatus({
+      type: "not_logged_in",
+      showForm: false,
+      showCountdown: false,
+    });
+    setIsLoading(false);
+    return;
+  }
 
-    try {
-      const discordId = getDiscordId(user);
-      if (!discordId) {
+  try {
+    const discordId = getDiscordId(user);
+    if (!discordId) {
+      // Only show error if authentication is complete
+      if (!loading) {
         setStatusMessage({
           type: "error",
           message: "Could not determine Discord ID",
         });
-        setIsLoading(false);
-        return;
       }
-
-      const { data, error } = await withTimeout(
-        supabase
-          .from("users")
-          .select("hub_trial, revoked, trial_expiration")
-          .eq("discord_id", discordId)
-          .single()
-      );
-
-      if (error && error.code !== "PGRST116") {
-        console.error("Error fetching user data:", error);
-        setIsLoading(false);
-        return;
-      }
-
-      setUserData(
-        data || { hub_trial: false, revoked: true, trial_expiration: null }
-      );
       setIsLoading(false);
-    } catch (error) {
-      console.error("Failed to fetch user data:", error);
-      setIsLoading(false);
-    } finally {
-      setIsLoading(false);
+      return;
     }
-  };
 
-  // Load user data
-  useEffect(() => {
-    if (user) {
-      fetchUserData();
+    const { data, error } = await withTimeout(
+      supabase
+        .from("users")
+        .select("hub_trial, revoked, trial_expiration")
+        .eq("discord_id", discordId)
+        .single()
+    );
+
+    if (error && error.code !== "PGRST116") {
+      console.error("Error fetching user data:", error);
+      setIsLoading(false);
+      return;
     }
-  }, [user, loading, supabase]);
+
+    setUserData(
+      data || { hub_trial: false, revoked: true, trial_expiration: null }
+    );
+    setIsLoading(false);
+  } catch (error) {
+    console.error("Failed to fetch user data:", error);
+    setIsLoading(false);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+// Also update your useEffect that calls fetchUserData:
+useEffect(() => {
+  // Only fetch user data if user exists AND loading is complete
+  if (user && !loading) {
+    fetchUserData();
+  } else if (!user && !loading) {
+    // User is confirmed to not be logged in
+    setUserStatus({
+      type: "not_logged_in",
+      showForm: false,
+      showCountdown: false,
+    });
+    setIsLoading(false);
+  }
+}, [user, loading, supabase]);
 
   // Determine user status
   useEffect(() => {
@@ -246,6 +260,7 @@ export default function WhitelistPage() {
                 discordUsername,
                 ign: ign.trim(),
                 referral: referral.trim() || "None",
+                referralDiscordId: referralDiscordId || null, // Include the discord_id for tracking
                 trialEnds,
               }),
             }
@@ -267,6 +282,7 @@ export default function WhitelistPage() {
 
         setIgn("");
         setReferral("");
+        setReferralDiscordId("");
 
         setTimeout(() => {
           window.location.reload();
@@ -297,7 +313,7 @@ export default function WhitelistPage() {
         setIsSubmitting(false);
       }
     },
-    [ign, referral, user, supabase]
+    [ign, referral, referralDiscordId, user, supabase] // Add referralDiscordId to dependencies
   );
 
   const handleIgnChange = useCallback(
@@ -313,8 +329,9 @@ export default function WhitelistPage() {
   );
 
   const handleReferralChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setReferral(e.target.value);
+    (value: string, discordId?: string) => {
+      setReferral(value);
+      setReferralDiscordId(discordId || "");
     },
     []
   );
@@ -567,7 +584,7 @@ export default function WhitelistPage() {
                 <p className="text-white/90 text-lg leading-relaxed">
                   To help the A-List Hub Staff track referrals smoothly,{" "}
                   <strong className="text-blue-300">
-                    have your referral enter your name in the "Referred By"
+                    have your referral enter your Discord username in the "Referred By"
                     section
                   </strong>{" "}
                   of the{" "}
@@ -952,16 +969,11 @@ export default function WhitelistPage() {
                             (Optional)
                           </span>
                         </label>
-                        <input
-                          type="text"
-                          id="referral"
-                          name="referral"
+                        <ReferralSelector
                           value={referral}
                           onChange={handleReferralChange}
-                          placeholder="IGN of who referred you"
-                          maxLength={50}
-                          autoComplete="off"
-                          className="w-full p-4 sm:p-5 rounded-xl border-2 border-white/20 bg-black/40 text-white text-base sm:text-lg backdrop-blur-xl focus:outline-none focus:border-[#ffd700] focus:ring-4 focus:ring-[#ffd700]/20 transition-all duration-300 placeholder-white/50"
+                          disabled={isSubmitting}
+                          className="w-full"
                         />
                       </div>
 
