@@ -465,6 +465,7 @@ export default function CalculatorPage() {
       "5.45x39mm 45rnd RPK-74 Tracer Mag",
       "5.56x45mm 30rnd AUG Mag",
       "5.56x45mm 30rnd STANAG Mag",
+      "5.56x45mm PMAG 40",
       "5.56x45mm 200rnd M249 Belt",
       "7Rnd M200 Magazine",
       "7.62x39mm 30rnd Sa-58 Mag",
@@ -677,6 +678,7 @@ export default function CalculatorPage() {
     "5.45x39mm 45rnd RPK-74 Tracer Mag": 10,
     "5.56x45mm 30rnd AUG Mag": 6,
     "5.56x45mm 30rnd STANAG Mag": 5,
+    "5.56x45mm PMAG 40": 8,
     "5.56x45mm 200rnd M249 Belt": 11,
     "7Rnd M200 Magazine": 10,
     "7.62x39mm 30rnd Sa-58 Mag": 9,
@@ -1110,6 +1112,9 @@ export default function CalculatorPage() {
       },
       "5.56x45mm 30rnd STANAG Mag": {
         "Non-HQ": { Ammo: 1 },
+      },
+      "5.56x45mm PMAG 40": {
+        "Non-HQ": { Ammo: 3 },
       },
       "5.45x39mm 30rnd AK Mag": {
         "Non-HQ": { Ammo: 2 },
@@ -1923,6 +1928,7 @@ export default function CalculatorPage() {
     "5.45x39mm 45rnd RPK-74 Tracer Mag": 30,
     "5.56x45mm 30rnd AUG Mag": 20,
     "5.56x45mm 30rnd STANAG Mag": 20,
+    "5.56x45mm PMAG 40": 20,
     "5.56x45mm 200rnd M249 Belt": 30,
     "7Rnd M200 Magazine": 30,
     "7.62x39mm 30rnd Sa-58 Mag": 20,

@@ -500,6 +500,7 @@ const BLUEPRINT_CATEGORIES = {
     "5.45x39mm 45rnd RPK-74 Tracer Mag",
     "5.56x45mm 30rnd AUG Mag",
     "5.56x45mm 30rnd STANAG Mag",
+    "5.56x45mm PMAG 40",
     "5.56x45mm 200rnd M249 Belt",
     "7Rnd M200 Magazine",
     "7.62x39mm 30rnd Sa-58 Mag",

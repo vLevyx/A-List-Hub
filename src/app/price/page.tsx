@@ -258,6 +258,7 @@ export default function PricePlannerPage() {
       "5.56x45mm 200rnd M249 Belt": { HQ: { "Ammo (HQ)": 15 } },
       "5.56x45mm 30rnd AUG Mag": { "Non-HQ": { Ammo: 1 } },
       "5.56x45mm 30rnd STANAG Mag": { "Non-HQ": { Ammo: 1 } },
+      "5.56x45mm PMAG 40": { "Non-HQ": { Ammo: 1 } },
       "5.45x39mm 30rnd AK Mag": { "Non-HQ": { Ammo: 2 } },
       "5.45x39mm 45rnd RPK-74 Tracer Mag": { HQ: { "Ammo (HQ)": 1 } },
       "7.62x51mm FMJ": { HQ: { "Ammo (HQ)": 1 } },
