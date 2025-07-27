@@ -1,18 +1,18 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Parcel Route Planner - A-List Hub',
-  description: 'Optimize your parcel delivery routes across Everon Island for maximum efficiency and profit in Arma Reforger.',
+  title: 'Parcel Route Planner',
+  description: 'Optimize your parcel delivery routes across Everon.',
   keywords: 'Arma Reforger, Everon, parcel delivery, route optimization, route planner, gaming tools',
   openGraph: {
-    title: 'Parcel Route Planner - A-List Hub',
-    description: 'Optimize your parcel delivery routes across Everon Island for maximum efficiency and profit.',
+    title: 'Parcel Route Planner',
+    description: 'Optimize your parcel delivery routes across Everon.',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Parcel Route Planner - A-List Hub',
-    description: 'Optimize your parcel delivery routes across Everon Island for maximum efficiency and profit.',
+    title: 'Parcel Route Planner',
+    description: 'Optimize your parcel delivery routes across Everon.',
   },
 }
 
