@@ -551,6 +551,7 @@ export default function CalculatorPage() {
       "Cotton Shirt",
       "CWU-27 Pilot Coveralls",
       "Dress",
+      "Fanny Pack",
       "Fedora",
       "Fisher Hat",
       "Flat Cap",
@@ -770,7 +771,8 @@ export default function CalculatorPage() {
     "Classic Shoe": 4,
     "Cotton Shirt": 3,
     "CWU-27 Pilot Coveralls": 6,
-    Dress: 5,
+    "Dress": 5,
+    "Fanny Pack": 3,
     Fedora: 3,
     "Fisher Hat": 3,
     "Flat Cap": 3,
@@ -1535,6 +1537,9 @@ export default function CalculatorPage() {
       Dress: {
         "Non-HQ": { Cloth: 3 },
       },
+      "Fanny Pack": {
+        "Non-HQ": { Cloth: 2 },
+      },
       Fedora: {
         "Non-HQ": { Cloth: 1 },
       },
@@ -2021,6 +2026,7 @@ export default function CalculatorPage() {
     "Cotton Shirt": 20,
     "CWU-27 Pilot Coveralls": 20,
     Dress: 20,
+    "Fanny Pack": 20,
     Fedora: 20,
     "Fisher Hat": 20,
     "Flat Cap": 20,

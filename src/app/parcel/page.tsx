@@ -74,20 +74,20 @@ const PARCEL_STATIONS: ParcelStation[] = [
   { id: 12, name: "Parcel Station 12", gridX: 97, gridZ: 15, x: 9700, z: 1500 }
 ]
 
-// Real travel time data (in seconds, rounded to nearest 5, with ±10s buffer applied)
+// Real travel time data (in seconds)
 const REAL_TRAVEL_TIMES: { [from: number]: { [to: number]: number } } = {
-  1: { 7: 115, 8: 140, 9: 150, 11: 240, 12: 305 },
-  2: { 1: 95, 8: 230, 9: 230, 11: 330, 12: 385 },
-  3: { 4: 90, 5: 65 },
-  4: { 2: 145, 5: 65 },
-  5: { 1: 185, 2: 165, 3: 60, 4: 70, 6: 230, 7: 310, 8: 315, 9: 310, 11: 410, 12: 490 },
-  6: { 1: 60, 7: 90 },
-  7: { 1: 120, 6: 105 },
-  8: { 10: 225 },
-  9: { 1: 140, 8: 105, 11: 105 },
-  10: { 1: 410, 9: 265, 11: 160, 12: 215 },
-  11: { 1: 245, 8: 210, 9: 105, 10: 170, 12: 80 },
-  12: { 1: 310, 2: 425, 4: 445, 5: 470, 9: 170, 10: 240, 11: 75 }
+  1: { 2: 80, 3: 115, 4: 125, 5: 160, 6: 65, 7: 115, 8: 140, 9: 150, 10: 240, 11: 240, 12: 303 },
+  2: { 1: 100, 3: 120, 4: 145, 5: 165, 6: 160, 7: 245, 8: 230, 9: 232, 10: 340, 11: 330, 12: 387 },
+  3: { 1: 160, 2: 120, 4: 92, 5: 63, 6: 215, 7: 300, 8: 295, 9: 305, 10: 395, 11: 405, 12: 465 },
+  4: { 1: 185, 2: 145, 3: 85, 5: 65, 6: 210, 7: 305, 8: 320, 9: 335, 10: 420, 11: 440, 12: 510 },
+  5: { 1: 175, 2: 163, 3: 60, 4: 68, 6: 230, 7: 310, 8: 315, 9: 312, 10: 435, 11: 410, 12: 492 },
+  6: { 1: 60, 2: 130, 3: 165, 4: 195, 5: 205, 7: 90, 8: 185, 9: 165, 10: 305, 11: 270, 12: 325 },
+  7: { 1: 120, 2: 225, 3: 265, 4: 290, 5: 310, 6: 105, 8: 170, 9: 120, 10: 215, 11: 220, 12: 275 },
+  8: { 1: 165, 2: 245, 3: 280, 4: 290, 5: 330, 6: 220, 7: 185, 9: 150, 10: 226, 11: 250, 12: 315 },
+  9: { 1: 140, 2: 215, 3: 255, 4: 265, 5: 300, 6: 205, 7: 105, 8: 105, 10: 140, 11: 105, 12: 160 },
+  10: { 1: 245, 2: 320, 3: 355, 4: 375, 5: 400, 6: 295, 7: 200, 8: 225, 9: 200, 11: 160, 12: 215 },
+  11: { 1: 245, 2: 320, 3: 355, 4: 370, 5: 405, 6: 315, 7: 210, 8: 210, 9: 105, 10: 169, 12: 75 },
+  12: { 1: 310, 2: 425, 3: 450, 4: 447, 5: 470, 6: 360, 7: 265, 8: 310, 9: 180, 10: 240, 11: 75 }
 }
 
 const VEHICLE_CAPACITIES = {
@@ -112,13 +112,13 @@ function calculateStraightLineDistance(station1: ParcelStation, station2: Parcel
 }
 
 function getRealTravelTime(fromId: number, toId: number): number {
-  // Check if we have real travel time data
-  const directTime = REAL_TRAVEL_TIMES[fromId]?.[toId]
-  if (directTime) return directTime
+  // With complete dataset, we should always have the travel time
+  const travelTime = REAL_TRAVEL_TIMES[fromId]?.[toId]
   
-  // Check reverse direction
-  const reverseTime = REAL_TRAVEL_TIMES[toId]?.[fromId]
-  if (reverseTime) return reverseTime
+  if (travelTime) return travelTime
+  
+  // This should rarely happen now with complete data, but keep as safety fallback
+  console.warn(`Missing travel time data for ${fromId} → ${toId}`)
   
   // Fallback to estimated time based on straight-line distance
   const fromStation = PARCEL_STATIONS.find(s => s.id === fromId)!
@@ -126,8 +126,7 @@ function getRealTravelTime(fromId: number, toId: number): number {
   const straightLineDistance = calculateStraightLineDistance(fromStation, toStation)
   
   // Estimate: assume average speed of 60 km/h, convert meters to seconds
-  // Distance in meters / (60000 m/min) * 60 s/min = time in seconds
-  return Math.round((straightLineDistance / 1000) * 60) // Rough estimation
+  return Math.round((straightLineDistance / 1000) * 60)
 }
 
 function twoOptImprovement(route: ParcelStation[]): ParcelStation[] {

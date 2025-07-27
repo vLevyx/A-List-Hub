@@ -10,6 +10,7 @@ import { getDiscordId, formatDate, timeAgo } from "@/lib/utils";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { Button } from "@/components/ui/Button";
 import { withTimeout } from "@/lib/timeout";
+import { ReferralsSection } from "@/components/admin/ReferralsSection";
 
 // Admin IDs that have access
 const ADMIN_DISCORD_IDS = [
@@ -1131,6 +1132,17 @@ export default function AdminPage() {
             >
               Audit Logs
             </button>
+
+            <button
+              className={`pb-3 px-1 font-medium ${
+                activeTab === "referrals"
+                  ? "text-[#00c6ff] border-b-2 border-[#00c6ff]"
+                  : "text-white/60 hover:text-white/80"
+              }`}
+              onClick={() => setActiveTab("referrals")}
+            >
+              Referrals
+            </button>
           </div>
         </div>
 
@@ -2067,6 +2079,9 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* Referrals Tab */}
+        {activeTab === "referrals" && <ReferralsSection />}
 
       {/* User Detail Panel */}
       {userDetailOpen && selectedUser && (
