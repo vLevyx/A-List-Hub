@@ -591,6 +591,7 @@ const BLUEPRINT_CATEGORIES = {
     "Cotton Shirt",
     "CWU-27 Pilot Coveralls",
     "Dress",
+    "F2 Bergan Backpack",
     "Fanny Pack",
     "Fedora",
     "Fisher Hat",

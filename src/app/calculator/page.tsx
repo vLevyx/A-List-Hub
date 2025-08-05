@@ -551,6 +551,7 @@ export default function CalculatorPage() {
       "Cotton Shirt",
       "CWU-27 Pilot Coveralls",
       "Dress",
+      "F2 Bergan Backpack",
       "Fanny Pack",
       "Fedora",
       "Fisher Hat",
@@ -772,6 +773,7 @@ export default function CalculatorPage() {
     "Cotton Shirt": 3,
     "CWU-27 Pilot Coveralls": 6,
     "Dress": 5,
+    "F2 Bergan Backpack": 7,
     "Fanny Pack": 3,
     Fedora: 3,
     "Fisher Hat": 3,
@@ -855,6 +857,7 @@ export default function CalculatorPage() {
     backpacks: {
       'ADA Assault Pack': 19,
       "ALICE Medium Backpack": 13,
+      "F2 Bergan Backpack": 19,
       "IIFS Large Combat Field Pack": 19,
       "Kolobok Backpack": 10,
       "M70 Backpack": 8,
@@ -1536,6 +1539,9 @@ export default function CalculatorPage() {
       },
       Dress: {
         "Non-HQ": { Cloth: 3 },
+      },
+      "F2 Bergan Backpack": {
+        "Non-HQ": { Cloth: 32 },
       },
       "Fanny Pack": {
         "Non-HQ": { Cloth: 2 },

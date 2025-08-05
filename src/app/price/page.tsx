@@ -491,6 +491,7 @@ export default function PricePlannerPage() {
       "Classic Shoe": { "Non-HQ": { Cloth: 2 } },
       "CWU-27 Pilot Coveralls": { "Non-HQ": { Cloth: 20 } },
       Dress: { "Non-HQ": { Cloth: 3 } },
+      "F2 Bergan Backpack": { "Non-HQ": { Cloth: 32 } },
       "Fanny Pack": { "Non-HQ": { Cloth: 2 } },
       Fedora: { "Non-HQ": { Cloth: 1 } },
       "Fisher Hat": { "Non-HQ": { Cloth: 1 } },
