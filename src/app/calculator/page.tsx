@@ -847,6 +847,7 @@ export default function CalculatorPage() {
       "EVENT | Ural-4320 Fuel Truck": { canisters: 98 },
       "Ural-4320 Transport Truck": 100,
       "Ural-4320 Transport Truck - Canopy": 116,
+      "Ural (Device)": 108,
       "EVENT | Ural-4320 Transport Truck - Canopy": 128,
       "VW Rolf": 18,
       "S105 Car": 18,

@@ -41,8 +41,8 @@ const features = [
     tagType: "new" as const,
   },
   {
-    title: "OverFuel+",
-    href: "/overfuel",
+    title: "Parcel Planner",
+    href: "/parcel",
     requiresAccess: true,
     tag: "New!",
     tagType: "new" as const,
