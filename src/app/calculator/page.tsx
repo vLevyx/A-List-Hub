@@ -860,7 +860,7 @@ export default function CalculatorPage() {
       "ALICE Medium Backpack": 13,
       "F2 Bergan Backpack": 19,
       "IIFS Large Combat Field Pack": 19,
-      "Kolobok Backpack": 10,
+      "Kolobok Backpack": 13,
       "M70 Backpack": 8,
       "Veshmeshok Backpack": 6,
     },
@@ -3320,7 +3320,7 @@ export default function CalculatorPage() {
 
             {/* Footer */}
             <div className="text-center mt-8 text-white/50">
-              <p>Updated | July 24, 2025</p>
+              <p>Updated | August 28, 2025</p>
             </div>
           </div>
         </div>
